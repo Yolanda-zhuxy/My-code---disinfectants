@@ -1,0 +1,2682 @@
+---
+title: "phy_test_zxy"
+author: "zxy"
+date: "2023-12-21"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup & load packages, include=FALSE}
+#一个chunk（代码块）类似文章的一节，其名字（如setup，load data等）相当于小标题，其中的代码可以通过右边的小箭头一次性跑完
+#创建新chunk的快捷键：Ctrl + Alt + I
+knitr::opts_chunk$set(echo = TRUE)
+#通过knitr::opts_chunk$set设置全局参数，echo=TRUE表⽰在最终⽂档显⽰代码块；反之，只会显示代码运行的结果和图像。
+pacman::p_load(phyloseq,vegan,ggplot2,ggpubr,ggsci,ape,dplyr,xlsx,remedy,reshape2,stringr,corrplot,ggthemes,tidyr,tidyverse,foreach,microbiome,speedyseq,picante,ggh4x,ggalt,edgeR,VennDiagram,vegan,ggbreak)
+#::可以在需要用某个函数时，临时直接加载其所在的包，不用事先library。"pacman::p_load"即在不提前加载pacman包的情况下使用其中的函数p_load。
+#pacman包提供功能覆盖了R内置的基本的函数,如library(),install.packages的功能。。p_load函数：一次性下载并加载多个包。
+library(jintao)
+setwd("C:/Users/99495/Desktop/R_Working directory")
+#set.seed(1)
+```
+
+```{r load data&color}
+col_genus <- c("#0c84c6","#F0E68C", "#FFA07A", "#FFC115", "#87CEFA", "#778899", "#B0C4DE","#800000",
+               "#CD1076", "#8DEEEE", "#FAFAD2", "#ADD8E6", "#F08080", "#002c53","#7B68EE",
+               "#FFB6C1", "#FFA07A", "#20B2AA", "#f74d4d", "#ffbd66",  "#ffa510","#006400",
+               "#006b7b", "#191970", "#EE7600", "#800080", "#CD0000", "#A020F0","#FFD700", 
+               "#7B68EE" )
+col_genus1 <- rev(col_genus)
+
+col_phylum <- c( "#FFA500","#CD1076","#A020F0","#FF19C5","#87CEFA","#7B68EE","#808080","#800080",
+                 "#9ACD32","#D15FEE","#FFC0CB","#EE6A50","#8DEEEE","#006400","#800000","#EE7600",
+                 "#191970","#CD0000","#4F94CD","#FFD700","#20B2AA","#A020F0")
+col_phylum1 <- rev(col_phylum)
+
+col_Machine_group <- c("traditional_cocoonery"= "#800080", "mechanized_cocoonery"="#f8766d", "mechanized_cocoonery_3"="#FFC0CB",
+                       
+                       "preO"="#f8766d","postO"="#FFC0CB",
+                       
+                       "pre"="#778899", "Pre"="#778899","postA"="#CDAD00","postB"="#3CB371","postC"="#009ACD",
+                      
+                       "H2O"="#B0C4DE","WW"="#FFD700","KB"="#9ACD32","MCFA"="#00CCFF",
+                       
+                      
+                        "MA"="#B2DFEE", "IS"="#6699CC", "TB"="#3399FF", "TE"="#00CCFF", "CA"="#0000FF", "OF"="#CC6666","OD"="#CD7054", 
+                       "LT"="#99FF99", "LS"="#99CC00", "LE"="#66CC33", 
+                       "LAB"="#2E8B57", "IN"="#0066FF", "OUT"="#FF3300")
+
+
+col_cocoonery_type <- c("traditional_cocoonery"="#800080", "mechanized_cocoonery"="#f8766d","mechanized_cocoonery_3"="#FFC0CB",
+                        "H2O"="#B0C4DE","WW"="#FFD700","KB"="#9ACD32","MCFA"="#00CCFF",
+                        "Pre"="#778899","AWW"="#CDAD00","BKB"="#3CB371","CMCFA"="#009ACD")
+
+library(knitr)
+library(qiime2R)#将qiime2中的最终特征表文件(table.qza)，分类文件(taxonomy.qza)及进化树文件直接导入R软件中，进行图形的绘制及统计分析。
+
+wkdir_vector=c("data/16s/lotus2/")
+physeq<-arrange_lotus_physeq(wkdir_vector,qiime_tax_name = "taxonomy.qza")
+#读取data/16s/lotus2路径下的16s序列数据，并按照样本名排序并返回phyloseq对象 physeq。qiime_tax_name参数表示将OTU/ASV表中的特征注释信息从qiime2格式的特征表中读取。
+
+tmp_new_name<-read.csv("data/origin_group_newname.csv",header = T,row.names = 1);rownames(tmp_new_name)<-str_replace_all(rownames(tmp_new_name),"-",".")
+#row.names = 1表示使用文件中的第一列作为行名。str_replace_all函数，将 tmp_new_name 的行名中的 "-" 字符替换为 "." 字符，并将替换后的行名重新赋值给 tmp_new_name。
+sample_names(physeq)<-tmp_new_name[sample_names(physeq),]$V2 ## 替换成新名字
+
+sample_data(physeq)<-sample_data(openxlsx::read.xlsx("group_all.xlsx",rowNames = T))[sample_names(physeq),]
+#用 openxlsx::read.xlsx 函数读取名为 "data/group_all.xlsx"的Excel文件，将其作为样品数据表，并将行名作为样品名。然后，使用sample_names(physeq)返回的样本名在样品数据表中查找对应行，并将查找到的子集作为 phyloseq对象physeq的新的样品数据。
+physeq_bac<-physeq %>% subset_taxa(str_detect(Kingdom,"Bacteria"))
+#subset_taxa 函数按照过滤条件对OTU/ASV表和注释信息进行过滤，此处过滤得到"Kingdom" 注释信息中包含 "Bacterial" 的OTU/ASV。
+phy_tree(physeq_bac)<-phy_tree(qiime2R::read_qza("data/16s/rooted-tree.qza")$data)
+#phy_tree 函数将其转换成 R 中的进化树对象。
+#前后两个函数作用是不一样的
+physeq_bac<-rarefy_physeq(physeq_bac)
+#rarefy_physeq 是一个用于稀疏化（rarefaction）phyloseq对象的函数,即抽平。在微生物组学研究中，通常通过测序分析获取微生物群落的组成，但不同样本可能有不同的测序深度。为了比较样本之间的微生物群落，有时会对数据进行稀疏化处理。
+
+physeq<-physeq_bac
+#t_otu<-as.data.frame(as(otu_table(physeq),"matrix"))
+t_otu<-as.data.frame(t(as(otu_table(physeq),"matrix")))
+#转置OTU表并转换为数据框:首先使用 otu_table 函数提取 physeq 中的OTU表，然后通过 as.matrix 转换为矩阵，接着使用 t 进行转置，并最终通过 as.data.frame 转换为数据框。结果是一个行表示样本、列表示OTU的数据框 t_otu。
+phy<-phy_tree(physeq)
+#使用 phy_tree 函数从 physeq 中提取物种树，将其存储在 phy 对象中。
+tax<-as.data.frame(tax_table(physeq))
+#提取分类信息数据框：使用 tax_table 函数提取 physeq 中的分类信息表，并通过 as.data.frame 转换为数据框，将结果存储在 tax 中。
+group<-meta(physeq)#使用 meta 函数提取 physeq 中的元数据信息，将其存储在 group 对象中
+group_name <- c("preO","preA","preB","preC","postO","postA","postB","postC")
+group_head <- "Machine_group"
+
+source("C:/Users/99495/Desktop/R_Working directory/jintao_0.1.0/jintao/R/change_rare_phylum_name.R")
+```
+
+
+```{r genus_colors}
+#在composition中遇到问题：五张图中微生物属被分配到不同的颜色
+#解决方法：手动设置微生物属和对应的颜色
+
+# name_genus<- data.frame(physeq@tax_table)
+# all_genus <- unique(name_genus$Genus)#每个属只显示一次，过滤掉多余的Others
+# print(all_genus)
+# #输出数据中所有的微生物属名
+
+col_microbes_Genus <- data.frame(
+  Genus = c("Acinetobacter","Bacillus","Brachybacterium","Brevibacterium","Brevundimonas","Corynebacterium","Enterococcus","Glutamicibacter","Isoptericola","Exiguobacterium","Kocuria","Massilia","Methylobacterium-Methylorubrum","Others","Paracoccus","Pseudomonas","Ralstonia","Rhodococcus","Sphingomonas","Staphylococcus","Cellulosimicrobium","Paenibacillus","Pasteuria","Bradyrhizobium","Comamonas","Enhydrobacter","Stenotrophomonas","Vagococcus"),  
+  #所有微生物属
+  Color = c("#00CCFF","#002c53","#FFA07A","#F0E68C","#778899","#8DEEEE","#800080","#6495ED","#8B658B","#FFD700","#FAFAD2","#20B2AA","#FFB6C1","#B0C4DE","#7B68EE","#006b7b","#800000","#CC99FF","#FFFF33","#CC9933","#00CC99","#669966","#FF6633","#CC9909","#663300","#669999","#FFFFCC","#8B814C")
+  # 对应的颜色
+)
+genus_colors <- setNames(col_microbes_Genus$Color, col_microbes_Genus$Genus)
+#用命名向量genus_colors将每一种颜色和Genus绑定
+
+#后面composition作图的时候，根据genus_colors向量，在不同的图片中使用相同的颜色映射
+#即：scale_fill_manual(values = genus_colors)
+
+```
+
+```{r composition barplot1.1(tra-mec)}
+library(nyankomicro)
+rank="Genus" #修改水平,Phylum门水平，Genus属水平等
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX")) %>% 
+  #将Location为HZNX（湖州南浔）的样本提取到physeq变量
+
+##选取作图的组别
+  subset_samples(Cocoonery_type%in% c("traditional_cocoonery","mechanized_cocoonery")) 
+
+##聚合：
+physeq <- physeq %>% speedyseq::tax_glom(taxrank = rank)  %>%
+  change_rare_phylum_name(max_number = 18,level = rank,relative = T,in_eachgroup = NULL) %>%
+  select_tax_table(!!rank) %>% aggregate_taxa(level = rank)
+physeq_ps$Cocoonery_type <- factor(physeq_ps$Cocoonery_type,levels = c("traditional_cocoonery","mechanized_cocoonery"))
+
+##作图：
+microbiome_barplot(physeq,rank,
+                   plot_category = c("Cocoonery_type"),
+                   level=rank,color_methods="abundance",
+                   plot_percent=0.01)+
+
+  scale_fill_manual(values = genus_colors)+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1), 
+        text = element_text(size = 15),
+        legend.text = element_text(size = 13))+ 
+  scale_y_continuous(expand = c(0,0))
+
+##输出为文件：
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/composition_tra-mec.pdf",width =10,height = 6)
+```
+
+```{r composition barplot1.2(clean-dirty)}
+rank="Genus" #修改水平,Phylum门水平，Genus属水平等
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX")) %>% 
+  #将Location为HZNX（湖州南浔）的样本提取到physeq变量
+
+##选取作图的组别：  
+  subset_samples(Cocoonery_type%in% c("mechanized_cocoonery","Pre"))
+
+
+##聚类：
+physeq<-physeq %>% speedyseq::tax_glom(taxrank = rank)  %>% 
+  change_rare_phylum_name(max_number = 15,level = rank,relative = T,in_eachgroup = NULL) %>% 
+  aggregate_taxa(level = rank)
+
+
+##数据提取和转换
+sort_rank <- read.csv("data/test.csv")
+#读取排序表格test.csv
+physeq_ps <- physeq %>% 
+  psmelt() 
+physeq_ps$New_combine <- factor(physeq_ps$New_combine,levels = sort_rank$Sort)
+physeq_ps$Cocoonery_type <- factor(physeq_ps$Cocoonery_type,levels = c("mechanized_cocoonery","Pre"))
+#使用psmelt()函数将physeq对象转换为长格式（long format）的数据框，并将结果赋值给physeq_ps，这种转换用于更方便的数据处理和可视化。
+
+
+##作图
+physeq_ps <- physeq_ps %>% 
+  group_by(New_combine,Group)
+physeq_ps %>% ggplot(aes(x=New_combine,y=Abundance,fill=Genus))+
+  geom_col(position="fill",width = 0.8)+
+  scale_fill_manual(values = genus_colors)+
+  theme_bw()+  
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous(expand = c(0,0))+
+  facet_nested(.~Group ,  
+             scales = "free_x")  
+
+##输出为文件：
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/composition_clean-dirty.pdf",width =10,height = 6)
+```
+
+```{r composition barplot1.3(0h-72h)}
+library(nyankomicro)
+rank="Genus" #修改水平,Phylum门水平，Genus属水平等
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX")) %>% 
+  #将Location为HZNX（湖州南浔）的样本提取到physeq变量
+
+##选取作图的组别：  
+  subset_samples(Machine_group%in% c("preO","postO"))
+
+
+##聚类：
+physeq<-physeq %>% speedyseq::tax_glom(taxrank = rank)  %>% 
+  change_rare_phylum_name(max_number = 15,level = rank,relative = T,in_eachgroup = NULL) %>% 
+  aggregate_taxa(level = rank)
+
+
+##数据提取和转换
+sort_rank <- read.csv("data/test.csv")
+#读取排序表格test.csv
+physeq_ps <- physeq %>% 
+  psmelt() 
+physeq_ps$New_combine <- factor(physeq_ps$New_combine,levels = sort_rank$Sort)
+physeq_ps$Group <- factor(physeq_ps$Group,levels = c("preO","postO"))
+#使用psmelt()函数将physeq对象转换为长格式（long format）的数据框，并将结果赋值给physeq_ps，这种转换用于更方便的数据处理和可视化。
+
+
+##作图
+physeq_ps <- physeq_ps %>% 
+  group_by(New_combine,Group)
+physeq_ps %>% ggplot(aes(x=New_combine,y=Abundance,fill=Genus))+
+  geom_col(position="fill",width = 0.8)+
+  scale_fill_manual(values = genus_colors)+
+  theme_bw()+  
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous(expand = c(0,0))+
+  facet_nested(.~Group ,  
+             scales = "free_x")  
+
+##输出为文件
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/composition_0h-72h.pdf",width =10,height = 6)
+```
+
+```{r composition barplot2(O1side)}
+library(nyankomicro)
+rank="Genus" #修改水平,Phylum门水平，Genus属水平等
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX")) %>% 
+  #将Location为HZNX（湖州南浔）的样本提取到physeq变量
+
+  
+##选取作图的组别
+  subset_samples(Machine_group%in% c("H2O","WW","KB","MCFA")) 
+
+
+##聚合：
+physeq <- physeq %>% speedyseq::tax_glom(taxrank = rank)  %>%
+#使用 speedyseq 包中的 tax_glom 函数，对微生物群落数据进行聚合（glom）操作，指定聚合的分类水平为rank
+  change_rare_phylum_name(max_number = 18,level = rank,relative = T,in_eachgroup = NULL) %>%
+  select_tax_table(!!rank) %>% aggregate_taxa(level = rank)
+
+##作图：
+microbiome_barplot(physeq,rank,
+                   plot_category = c("Machine_group"),
+                   level=rank,color_methods="abundance",
+                   plot_percent=0.01)+
+                       scale_fill_manual(values = genus_colors)+
+                       theme(axis.text.x = element_text(angle = 90, hjust = 1),
+                   text = element_text(size = 15),
+                   legend.text = element_text(size = 13))+
+                       scale_y_continuous(expand = c(0,0))
+
+##输出为文件：
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/composition_O1side.pdf",width =10,height = 6)
+
+```
+
+```{r composition barplot3(pre-post)}
+library(nyankomicro)
+rank="Genus" #修改水平,Phylum门水平，Genus属水平等
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX")) %>% 
+  #将Location为HZNX（湖州南浔）的样本提取到physeq变量
+
+##选取作图的组别：  
+  subset_samples(Machine_group%in% c("preA","postA","preB","postB","preC","postC"))
+
+##聚类：
+physeq<-physeq %>% speedyseq::tax_glom(taxrank = rank)  %>% 
+  change_rare_phylum_name(max_number = 15,level = rank,relative = T,in_eachgroup = NULL) %>% 
+  aggregate_taxa(level = rank)
+
+
+##数据提取和转换
+sort_rank <- read.csv("data/test.csv")
+#读取排序表格test.csv
+physeq_ps <- physeq %>% 
+  psmelt() 
+physeq_ps$New_combine <- factor(physeq_ps$New_combine,levels = sort_rank$Sort)
+physeq_ps$Group <- factor(physeq_ps$Group,levels = c("pre","postA","postB","postC"))
+#使用psmelt()函数将physeq对象转换为长格式（long format）的数据框，并将结果赋值给physeq_ps，这种转换用于更方便的数据处理和可视化。
+
+##作图
+physeq_ps <- physeq_ps %>% 
+  group_by(New_combine,Group)
+#group_by 函数根据 New_combine 列对 physeq_ps 数据框进行分组
+physeq_ps %>% ggplot(aes(x=New_combine,y=Abundance,fill=Genus))+
+#aes 函数用于指定映射关系，其中 x=New_combine 表示 x 轴映射到 New_combine 列，y=Abundance 表示 y 轴映射到 Abundance 列，fill=Genus 表示颜色映射到 Genus 列。
+  geom_col(position="fill",width = 0.8)+
+  #geom_col 函数添加一个柱形图层，position="fill" 表示柱形图中的各个组的高度将被标准化为 1，即每个组的柱形的高度表示相对频率
+  scale_fill_manual(values = genus_colors)+
+  #scale_fill_manual 函数手动设置填充颜色，颜色值来源于 col_microbes_Genus 
+  theme_bw()+   #theme_bw 函数设置图形的主题为白色背景的基础主题
+  theme(panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank())+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  scale_y_continuous(expand = c(0,0))+
+  facet_nested(.~Group, scales = "free_x")
+#facet_wrap函数用于创建分面图。. ~Group 表示将数据按照 Group 列的不同取值进行分面
+
+physeq@tax_table <- gsub("Vagococcus","Staphylococcus",physeq@tax_table)
+
+
+
+##输出为文件
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/composition_pre_post.pdf",width =10,height = 6)
+```
+
+
+```{r (Function)anova_sig }
+anova_sig <- function(df , alpha_diversity , group){
+  anova <- aov(alpha_diversity~group , data = alpha_group)
+  pair_comparison <- TukeyHSD(anova)
+  pair_comparison_df <- pair_comparison$group %>% as.data.frame()
+  group_mean <- aggregate(x = alpha_diversity , by = list(group) , FUN = mean)%>%
+    rename_with(~c("Group" , "mean_val") , 1:2)
+  group_max <- aggregate(x = alpha_diversity , by = list(group) , FUN = max)%>%
+    rename_with(~c("Group" , "max") , 1:2)
+  group_sd <- aggregate(x = alpha_diversity , by = list(group) , FUN = sd)%>%
+    rename_with(~c("Group" , "sd") , 1:2)
+  ntr <- nrow(group_mean)
+  mat <- matrix(1 ,  ncol = ntr ,  nrow = ntr)
+  p <- pair_comparison_df$`p adj`
+  k <- 0
+  for (i in 1:(ntr - 1)) {
+    for (j in (i + 1):ntr) {
+      k <- k + 1
+      mat[i ,  j] <- p[k]
+      mat[j ,  i] <- p[k]
+    }
+  }
+  treatments <- as.vector(group_mean$Group)
+  means <- as.vector(group_mean$mean_val)
+  alpha <- 0.05
+  pvalue <- mat
+  output <- orderPvalue(treatments , means , alpha , pvalue , console = TRUE)
+  output$Group <- rownames(output)
+  output <- left_join(output , group_max , by = "Group")
+  output <- left_join(output , group_sd , by = "Group")
+  return(output)
+}
+
+```
+
+```{r alpha diversity1.1(tra-mec)}
+library(agricolae)
+physeq<-physeq_bac 
+
+t_otu<-data.frame(t(otu_table(physeq)))
+alpha_group<-cbind(jintao::alpha(t_otu,phy),group[rownames(t_otu),])
+
+
+df<-alpha_group %>% 
+  filter(Cocoonery_type%in% c("traditional_cocoonery","mechanized_cocoonery")) %>% 
+  mutate(Cocoonery_type=factor(Cocoonery_type, levels = c("traditional_cocoonery","mechanized_cocoonery")))
+
+richness_out <- anova_sig(df , df$Richness , df$Cocoonery_type)
+richness_out$type <- "Richness" #添加一列 "type" 表示alpha多样性类别(richness or shannon等）
+#丰富度richness的ANOVA检验及结果
+
+shannon_out <- anova_sig(df, df$Shannon , df$Cocoonery_type)
+shannon_out$type <- "Shannon"
+#香农指数的的ANOVA检验及结果
+
+alpha_out <- rbind(shannon_out , richness_out)%>%rename_with(~"marker" , 2)%>% rename_with(~"Cocoonery_type" , 3)
+#合并三者结果（两次anova和新增列），然后重命名列名
+
+df_long <- df %>% select(Shannon,Richness,Cocoonery_type) %>% 
+     pivot_longer( cols = -Cocoonery_type , names_to = "type" , values_to = "alpha_index")
+#将长表与差异分析结果合并
+
+df_long_all <- left_join(df_long , alpha_out , by = c("type" , "Cocoonery_type"))
+df_long_all$Cocoonery_type <- factor(df_long_all$Cocoonery_type, levels = c("traditional_cocoonery","mechanized_cocoonery"))
+p_fun_alpha <- ggplot(df_long_all , aes(Cocoonery_type , alpha_index))+
+  scale_fill_manual(values = col_Machine_group)+
+  geom_boxplot(aes(fill = Cocoonery_type))+
+  geom_jitter(aes(Cocoonery_type , alpha_index) , size = 1)+
+  geom_text(aes(x = Cocoonery_type , y = max+sd , label = marker) , size = 4 , position =  position_dodge(width = 0.2))+
+  facet_wrap(.~type ,  #type列作为变量，分面为一行多列
+             scales = "free_y")+  #scales = "free_y"可以使各个分面有自己的y轴刻度
+  theme(panel.grid = element_blank() , 
+        panel.background = element_rect(fill = 'white') , 
+        panel.border = element_rect(fill = NA , color = "black" ,  linewidth = 0.8 ,  linetype = "solid"),
+        axis.title = element_blank() , 
+        axis.text.x = element_blank(),
+        text = element_text(size = 15),
+        legend.text = element_text(size = 13));p_fun_alpha
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/alpha_tra-mec.pdf",width = 6,height = 4)
+```
+
+```{r alpha diversity1.2(clean-dirty)}
+library(agricolae)
+physeq<-physeq_bac 
+#只取这一部分数据作图，与composition不一样，不用location
+t_otu<-data.frame(t(otu_table(physeq)))
+alpha_group<-cbind(jintao::alpha(t_otu,phy),group[rownames(t_otu),])
+
+
+df<-alpha_group %>% 
+  filter(Cocoonery_type%in% c("mechanized_cocoonery", "Pre")) %>% 
+  mutate(Cocoonery_type=factor(Cocoonery_type, levels = c("mechanized_cocoonery", "Pre")))
+
+richness_out <- anova_sig(df , df$Richness , df$Cocoonery_type)
+richness_out$type <- "Richness" #添加一列 "type" 表示alpha多样性类别(richness or shannon等）
+#丰富度richness的ANOVA检验及结果
+
+shannon_out <- anova_sig(df, df$Shannon , df$Cocoonery_type)
+shannon_out$type <- "Shannon"
+#香农指数的的ANOVA检验及结果
+
+alpha_out <- rbind(shannon_out , richness_out)%>%rename_with(~"marker" , 2)%>% rename_with(~"Cocoonery_type" , 3)
+#合并三者结果（两次anova和新增列），然后重命名列名
+
+df_long <- df %>% select(Shannon,Richness,Cocoonery_type) %>% 
+     pivot_longer( cols = -Cocoonery_type , names_to = "type" , values_to = "alpha_index")
+#将长表与差异分析结果合并
+
+df_long_all <- left_join(df_long , alpha_out , by = c("type" , "Cocoonery_type"))
+df_long_all$Cocoonery_type <- factor(df_long_all$Cocoonery_type, levels = c("mechanized_cocoonery", "Pre"))
+p_fun_alpha <- ggplot(df_long_all , aes(Cocoonery_type , alpha_index))+
+  scale_fill_manual(values = col_Machine_group)+
+  geom_boxplot(aes(fill = Cocoonery_type))+
+  geom_jitter(aes(Cocoonery_type , alpha_index) , size = 1)+
+  geom_text(aes(x = Cocoonery_type , y = max+sd , label = marker) , size = 4 , position =  position_dodge(width = 0.2))+
+  facet_wrap(.~type ,  #type列作为变量，分面为一行多列
+             scales = "free_y")+  #scales = "free_y"可以使各个分面有自己的y轴刻度
+  theme(panel.grid = element_blank() , 
+        panel.background = element_rect(fill = 'white') , 
+        panel.border = element_rect(fill = NA , color = "black" ,  linewidth = 0.8 ,  linetype = "solid"),
+        axis.title = element_blank() , 
+        axis.text.x = element_blank(),
+        text = element_text(size = 15),
+        legend.text = element_text(size = 13));p_fun_alpha
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/alpha_clean-dirty.pdf",width = 6,height = 4)
+```
+
+```{r alpha diversity1.3(0h-72h)}
+library(agricolae)
+physeq<-physeq_bac 
+#只取这一部分数据作图，与composition不一样，不用location
+t_otu<-data.frame(t(otu_table(physeq)))
+alpha_group<-cbind(jintao::alpha(t_otu,phy),group[rownames(t_otu),])
+
+
+df<-alpha_group %>% 
+  filter(Group%in% c("preO", "postO")) %>% 
+  mutate(Group=factor(Group, levels = c("preO",  "postO")))
+
+richness_out <- anova_sig(df , df$Richness , df$Group)
+richness_out$type <- "Richness" #添加一列 "type" 表示alpha多样性类别(richness or shannon等）
+#丰富度richness的ANOVA检验及结果
+
+shannon_out <- anova_sig(df, df$Shannon , df$Group)
+shannon_out$type <- "Shannon"
+#香农指数的的ANOVA检验及结果
+
+alpha_out <- rbind(shannon_out , richness_out)%>%rename_with(~"marker" , 2)%>% rename_with(~"Group" , 3)
+#合并三者结果（两次anova和新增列），然后重命名列名
+
+df_long <- df %>% select(Shannon,Richness,Group) %>% 
+     pivot_longer( cols = -Group , names_to = "type" , values_to = "alpha_index")
+#将长表与差异分析结果合并
+
+df_long_all <- left_join(df_long , alpha_out , by = c("type" , "Group"))
+df_long_all$Group <- factor(df_long_all$Group, levels = c("preO", "postO"))
+p_fun_alpha <- ggplot(df_long_all , aes(Group , alpha_index))+
+  scale_fill_manual(values = col_Machine_group)+
+  geom_boxplot(aes(fill = Group))+
+  geom_jitter(aes(Group , alpha_index) , size = 1)+
+  geom_text(aes(x = Group , y = max+sd , label = marker) , size = 4 , position =  position_dodge(width = 0.2))+
+  facet_wrap(.~type ,  #type列作为变量，分面为一行多列
+             scales = "free_y")+  #scales = "free_y"可以使各个分面有自己的y轴刻度
+  theme(panel.grid = element_blank() , 
+        panel.background = element_rect(fill = 'white') , 
+        panel.border = element_rect(fill = NA , color = "black" ,  linewidth = 0.8 ,  linetype = "solid"),
+        axis.title = element_blank() , 
+        axis.text.x = element_blank(),
+        text = element_text(size = 15),
+        legend.text = element_text(size = 13));p_fun_alpha
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/alpha_0h-72h.pdf",width = 6,height = 4)
+```
+
+```{r alpha diversity2(O1side)}
+library(agricolae)
+physeq<-physeq_bac 
+#只取这一部分数据作图，与composition不一样，不用location
+t_otu<-data.frame(t(otu_table(physeq)))
+alpha_group<-cbind(jintao::alpha(t_otu,phy),group[rownames(t_otu),])
+
+df<-alpha_group %>% 
+  filter(Group%in% c("H2O", "WW", "KB", "MCFA")) %>% 
+  mutate(Group=factor(Group, levels = c("H2O", "WW", "KB", "MCFA")))
+
+richness_out <- anova_sig(df , df$Richness , df$Group)
+richness_out$type <- "Richness" #添加一列 "type" 表示alpha多样性类别(richness or shannon等）
+#丰富度richness的ANOVA检验及结果
+
+shannon_out <- anova_sig(df, df$Shannon , df$Group)
+shannon_out$type <- "Shannon"
+#香农指数的的ANOVA检验及结果
+
+alpha_out <- rbind(shannon_out , richness_out)%>%rename_with(~"marker" , 2)%>% rename_with(~"Group" , 3)
+#合并三者结果（两次anova和新增列），然后重命名列名
+
+df_long <- df %>% select(Shannon,Richness,Group) %>% 
+     pivot_longer( cols = -Group , names_to = "type" , values_to = "alpha_index")
+#将长表与差异分析结果合并
+
+df_long_all <- left_join(df_long , alpha_out , by = c("type" , "Group"))
+df_long_all$Group <- factor(df_long_all$Group, levels = c("H2O", "WW", "KB", "MCFA"))
+p_fun_alpha <- ggplot(df_long_all , aes(Group , alpha_index))+
+  scale_fill_manual(values = col_Machine_group)+
+  geom_boxplot(aes(fill = Group))+
+  geom_jitter(aes(Group , alpha_index) , size = 1)+
+  geom_text(aes(x = Group , y = max+sd , label = marker) , size = 4 , position =  position_dodge(width = 0.2))+
+  facet_wrap(.~type ,  #type列作为变量，分面为一行多列
+             scales = "free_y")+  #scales = "free_y"可以使各个分面有自己的y轴刻度
+  theme(panel.grid = element_blank() , 
+        panel.background = element_rect(fill = 'white') , 
+        panel.border = element_rect(fill = NA , color = "black" ,  linewidth = 0.8 ,  linetype = "solid"),
+        axis.title = element_blank() , 
+        axis.text.x = element_blank(),
+        text = element_text(size = 15),
+        legend.text = element_text(size = 13));p_fun_alpha
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/alpha_O1side.pdf",width = 6,height = 4)
+```
+
+```{r alpha diversity3(pre-post)}
+library(agricolae)
+physeq<-physeq_bac 
+#只取这一部分数据作图，与composition不一样，不用location
+t_otu<-data.frame(t(otu_table(physeq)))
+alpha_group<-cbind(jintao::alpha(t_otu,phy),group[rownames(t_otu),])
+
+
+df<-alpha_group %>% 
+  filter(Group%in% c("pre", "postA", "postB", "postC")) %>% 
+  mutate(Group=factor(Group, levels = c("pre", "postA", "postB", "postC")))
+
+richness_out <- anova_sig(df , df$Richness , df$Group)
+richness_out$type <- "Richness" #添加一列 "type" 表示alpha多样性类别(richness or shannon等）
+#丰富度richness的ANOVA检验及结果
+
+shannon_out <- anova_sig(df, df$Shannon , df$Group)
+shannon_out$type <- "Shannon"
+#香农指数的的ANOVA检验及结果
+
+alpha_out <- rbind(shannon_out , richness_out)%>%rename_with(~"marker" , 2)%>% rename_with(~"Group" , 3)
+#合并三者结果（两次anova和新增列），然后重命名列名
+
+df_long <- df %>% select(Shannon,Richness,Group) %>% 
+     pivot_longer( cols = -Group , names_to = "type" , values_to = "alpha_index")
+#将长表与差异分析结果合并
+
+df_long_all <- left_join(df_long , alpha_out , by = c("type" , "Group"))
+df_long_all$Group <- factor(df_long_all$Group, levels = c("pre", "postA", "postB", "postC"))
+p_fun_alpha <- ggplot(df_long_all , aes(Group , alpha_index))+
+  scale_fill_manual(values = col_Machine_group)+
+  geom_boxplot(aes(fill = Group))+
+  geom_jitter(aes(Group , alpha_index) , size = 1)+
+  geom_text(aes(x = Group , y = max+sd , label = marker) , size = 4 , position =  position_dodge(width = 0.2))+
+  facet_wrap(.~type ,  #type列作为变量，分面为一行多列
+             scales = "free_y")+  #scales = "free_y"可以使各个分面有自己的y轴刻度
+  theme(panel.grid = element_blank() , 
+        panel.background = element_rect(fill = 'white') , 
+        panel.border = element_rect(fill = NA , color = "black" ,  linewidth = 0.8 ,  linetype = "solid"),
+        axis.title = element_blank() , 
+        axis.text.x = element_blank(),
+        text = element_text(size = 15),
+        legend.text = element_text(size = 13));p_fun_alpha
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/alpha_pre_post.pdf",width = 6,height = 4)
+```
+
+
+```{r beta diversity NMDS1.1(tra-mec)}
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX"))%>%
+  subset_samples(Cocoonery_type%in% c("traditional_cocoonery","mechanized_cocoonery"))
+
+physeq@sam_data$Cocoonery_type <- factor(physeq@sam_data$Cocoonery_type, levels = c("traditional_cocoonery","mechanized_cocoonery"))
+
+group<-meta(physeq)
+otu<-otu_table(physeq) %>% data.frame()
+distance <- vegdist(t(otu), method = 'bray')#去都要用t(otu)
+nmds <- metaMDS(distance, k = 2)
+
+stress <- nmds$stress
+adonis <- adonis2(t(otu)~Cocoonery_type,group)
+
+pp<-plot_ordination(physeq, ordinate(physeq, method = "NMDS", distance = "bray") , 
+                    type="samples",color="Cocoonery_type")+
+  geom_point(size=3)+
+  scale_color_manual(values = col_Machine_group)+  
+  scale_shape_manual(values = c(17,16))
+
+library(ggalt)
+pp+theme_bw()+
+geom_encircle(aes(group = Cocoonery_type,fill=Cocoonery_type),expand=0,spread=0.5,s_shape=1,size=3,linetype = 1,alpha=0.2)+
+#geom_encircle()+#函数根据样本连线创建一个区域，将本组样本点包括进去
+scale_fill_manual(values = col_Machine_group)+#设置区域颜色与样本点颜色一致
+#stat_ellipse()+
+#stat_ellipse()：加上椭圆的圈（置信圈）
+scale_x_continuous(expand = expand_scale(0.05))+
+scale_y_continuous(expand = expand_scale(0.05))+
+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/beta_NMDS_tra-mec.pdf",width = 6,height = 4)
+```
+
+```{r beta diversity NMDS1.2(clean-dirty)}
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX"))%>%
+  subset_samples(Cocoonery_type%in% c("mechanized_cocoonery", "Pre"))
+#筛选需要分析和作图的样品
+ 
+physeq@sam_data$Cocoonery_type <- factor(physeq@sam_data$Cocoonery_type, levels = c("mechanized_cocoonery", "Pre"))
+#将physeq对象中的样本数据中的Group列转换为因子型，并设置水平为"Pre"、"postA"、"postB"和"postC"。
+
+group<-meta(physeq)#meta()函数：提取元数据
+otu<-otu_table(physeq) %>% data.frame()#otu_table():提取OTU表格;data.frame():转换为数据框
+distance <- vegdist(t(otu), method = 'bray')#计算Bray-Curtis距离
+nmds <- metaMDS(distance, k = 2)#进行非度量多维尺度分析（NMDS）并设置降维到2个维度
+
+stress <- nmds$stress#获取NMDS的stress值
+adonis <- adonis2(t(otu)~Cocoonery_type,group)#运行Adonis分析，评估组间差异。
+
+pp<-plot_ordination(physeq, ordinate(physeq, method = "NMDS", distance = "bray") , 
+                    type="samples",color="Cocoonery_type")+
+  geom_point(size=3)+
+  scale_color_manual(values = col_Machine_group)+  #注意color和fill的区别，有时候使用错误不会改变颜色。
+  scale_shape_manual(values = c(17,16))
+
+pp+theme_bw()+   
+geom_encircle(aes(group = Cocoonery_type,fill=Cocoonery_type),expand=0,spread=0.5,s_shape=1,size=3,linetype = 1,alpha=0.2)+
+#geom_encircle()函数根据样本连线创建一个区域，将本组样本点包括进去
+scale_fill_manual(values = col_Machine_group)+#设置区域颜色与样本点颜色一致
+#stat_ellipse()+
+#stat_ellipse()：加上椭圆的圈（置信圈）
+scale_x_continuous(expand = expand_scale(0.05))+
+scale_y_continuous(expand = expand_scale(0.05))+#expand_scale(0.05)表示将轴的数据范围扩展5%，这样可以留出一定空白。
+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())#+#去掉网格线
+#ggtitle(paste(paste(stress_text, adonis_text), anosim_text))
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/beta_NMDS_clean-dirty.pdf",width = 6,height = 4)
+
+```
+
+```{r beta diversity NMDS1.3(0h-72h)}
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX"))%>%
+  subset_samples(Machine_group%in% c("preO","postO"))
+
+physeq@sam_data$Machine_group <- factor(physeq@sam_data$Machine_group, levels = c("preO","postO"))
+
+group<-meta(physeq)
+otu<-otu_table(physeq) %>% data.frame()
+distance <- vegdist(t(otu), method = 'bray')#去都要用t(otu)
+nmds <- metaMDS(distance, k = 2)
+
+
+stress <- nmds$stress
+adonis <- adonis2(t(otu)~Machine_group,group)
+
+# anosim <- anosim(t(otu), group$Machine_group, permutations = 999, distance = "bray")
+# stress_text <- paste("Stress  =", round(stress, 4))
+# adonis_text <- paste(paste("Adonis  =", round(adonis$R2, 2)), "***")[1]
+# anosim_text <- paste(paste("Anosim  =", round(anosim$statistic, 2)), "***")#星号得自己加
+
+
+pp<-plot_ordination(physeq, ordinate(physeq, method = "NMDS", distance = "bray") , 
+                    type="samples",color="Machine_group")+
+  geom_point(size=3)+
+  scale_color_manual(values = col_Machine_group)+  
+  scale_shape_manual(values = c(17,16))
+#method可以选NMDS,PCoA等。
+
+pp+theme_bw()+   
+geom_encircle(aes(group = Machine_group,fill=Machine_group),expand=0,spread=0.5,s_shape=1,size=3,linetype = 1,alpha=0.2)+
+#geom_encircle()函数根据样本连线创建一个区域，将本组样本点包括进去
+scale_fill_manual(values = col_Machine_group)+#设置区域颜色与样本点颜色一致
+#stat_ellipse()+
+#加上椭圆的圈
+scale_x_continuous(expand = expand_scale(0.05))+
+scale_y_continuous(expand = expand_scale(0.05))+#expand_scale(0.05)表示将轴的数据范围扩展5%，这样可以留出一定空白。
+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())#+#去掉网格线
+#ggtitle(paste(paste(stress_text, adonis_text), anosim_text))
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/beta_NMDS_0h-72h.pdf",width = 6,height = 4)
+```
+
+```{r beta diversity NMDS2(O1side)}
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX"))%>%
+  subset_samples(Machine_group%in% c("H2O","WW","KB","MCFA"))
+
+physeq@sam_data$Machine_group <- factor(physeq@sam_data$Machine_group, levels = c("H2O","WW","KB","MCFA"))
+
+group<-meta(physeq)
+otu<-otu_table(physeq) %>% data.frame()
+distance <- vegdist(t(otu), method = 'bray')#去都要用t(otu)
+nmds <- metaMDS(distance, k = 2)
+
+stress <- nmds$stress
+adonis <- adonis2(t(otu)~Machine_group,group)
+
+
+pp<-plot_ordination(physeq, ordinate(physeq, method = "NMDS", distance = "bray") , 
+                    type="samples",color="Machine_group")+
+  geom_point(size=3)+
+  scale_color_manual(values = col_Machine_group)+  
+  scale_shape_manual(values = c(17,16))
+
+library(ggalt)
+pp+theme_bw()+
+geom_encircle(aes(group = Group,fill=Group),expand=0,spread=0.5,s_shape=1,size=3,linetype = 1,alpha=0.2)+
+#geom_encircle()+#函数根据样本连线创建一个区域，将本组样本点包括进去
+scale_fill_manual(values = col_Machine_group)+#设置区域颜色与样本点颜色一致
+#stat_ellipse()+
+#stat_ellipse()：加上椭圆的圈（置信圈）
+scale_x_continuous(expand = expand_scale(0.05))+
+scale_y_continuous(expand = expand_scale(0.05))+
+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/beta_NMDS_O1side.pdf",width = 6,height = 4)
+```
+
+```{r beta diversity NMDS3(pre-post)}
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX"))%>%
+  subset_samples(Group%in% c("pre","postA","postB","postC"))
+#筛选需要分析和作图的样品
+ 
+physeq@sam_data$Group <- factor(physeq@sam_data$Group, levels = c("pre","postA","postB","postC"))
+#将physeq对象中的样本数据中的Group列转换为因子型，并设置水平为"Pre"、"postA"、"postB"和"postC"。
+
+group<-meta(physeq)#meta()函数：提取元数据
+otu<-otu_table(physeq) %>% data.frame()#otu_table():提取OTU表格;data.frame():转换为数据框
+distance <- vegdist(t(otu), method = 'bray')#计算Bray-Curtis距离
+nmds <- metaMDS(distance, k = 2)#进行非度量多维尺度分析（NMDS）并设置降维到2个维度
+
+stress <- nmds$stress#获取NMDS的stress值
+adonis <- adonis2(t(otu)~Group,group)#运行Adonis分析，评估组间差异。
+#跑完这一行直接在控制台打adonis并运行，即可看到结果，随后手动添加P值或显著性标识
+
+# anosim <- anosim(t(otu), group$Machine_group, permutations = 999, distance = "bray")
+# stress_text <- paste("Stress  =", round(stress, 4))
+# adonis_text <- paste(paste("Adonis  =", round(adonis$R2, 2)), "***")[1]
+# anosim_text <- paste(paste("Anosim  =", round(anosim$statistic, 2)), "***")#星号得自己加
+
+
+pp<-plot_ordination(physeq, ordinate(physeq, method = "NMDS", distance = "bray") , 
+                    type="samples",color="Group")+
+  geom_point(size=3)+
+  scale_color_manual(values = col_Machine_group)+  #注意color和fill的区别，有时候使用错误不会改变颜色。
+  scale_shape_manual(values = c(17,16))
+
+pp+theme_bw()+   
+geom_encircle(aes(group = Group,fill=Group),expand=0,spread=0.5,s_shape=1,size=3,linetype = 1,alpha=0.2)+
+#geom_encircle()函数根据样本连线创建一个区域，将本组样本点包括进去
+scale_fill_manual(values = col_Machine_group)+#设置区域颜色与样本点颜色一致
+#stat_ellipse()+
+#stat_ellipse()：加上椭圆的圈（置信圈）
+scale_x_continuous(expand = expand_scale(0.05))+
+scale_y_continuous(expand = expand_scale(0.05))+#expand_scale(0.05)表示将轴的数据范围扩展5%，这样可以留出一定空白。
+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())#+#去掉网格线
+#ggtitle(paste(paste(stress_text, adonis_text), anosim_text))
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/beta_NMDS_pre_post.pdf",width = 6,height = 4)
+
+
+###PCA,PcoA,NMDS,RDA,CCA:不同的降维排序分析方法
+## 主成分分析（PCA）:
+#   降维原理：若将每个样本看成空间中的一个小球，小球在空间中根据相似程度分布，PCA分析就如同拿着一盏灯照向这些小球， 将小球投影在一个平面上。不断调整光源照射角度，找到能够最大程度展示小球在空间中原本分布状态的平面，该平面上小球投影的画面即PCA分析结果。
+#   局限性：需基于线性模型（linear model）开展（物种丰度伴随着环境变量的变化做出线性变化的响应）
+#   在实际环境中，微生物丰度通常呈现单峰模型，该模型假设在一定范围内微生物丰度随环境因素上升而增加，但到达临界值后，若环境因子指标继续增加，微生物丰度则出现下降。如温度，pH，盐含量等
+
+## 主坐标分析（PCoA）:
+#   降维原理：PCA分析是对样本中物种丰度数据的直接投影，而PCoA则是将样本数据经过不同距离算法获得样本距离矩阵的投影，在图形中样本点的距离等于距离矩阵中的差异数据距离。因此，PCA图形是一种同时反映样本与物种信息的biplot，而PCoA图形则是一类仅对样本距离矩阵进行降维的非biplot。与PCA不同的是，PCoA是对样品间距离（连线）的投影（而非样本本身的投影），在二维平面上展示的是样品间距离的信息，而不是样品的位置信息。
+#   局限性：PCoA是基于样本间相似性距离的分析，它的结果受相似性距离计算方式的影响，不同相似性距离计算方式对PCoA结果影响较大。
+
+
+## 非度量多维尺度分析（NMDS）:
+#   降维原理：NMDS分析与PCoA分析的相同点在于两者都使用样本相似性距离矩阵进行降维排序分析，从而在二维平面上对样本关系做出判断。不同于PCoA分析，NMDS弱化了对实际距离数值的依赖，更加强调数值间的排名（秩次），例如三个样本的两两相似性距离，（1,2,3）和（10,20,30）在NMDS分析上的排序一致，所呈现的效果相同。也就是说，在样本相似性较大的情况下，NMDS比PcoA更容易表现出差异。
+
+
+# 冗余分析（RDA）:
+#   冗余分析就是约束化的主成分分析PCA,目的是找到解释响应变量（dependent variables）的最佳线性组合，并通过最大化解释性方差来建立与解释变量（independent variables）之间的关系。
+# 
+# 典范对应分析（CCA）:
+#   CCA也是一种用于研究两组变量之间关系的技术，但它在约束条件下寻找解释变量和响应变量之间的最佳线性组合
+
+
+```
+
+
+
+```{r ComplexUpset1 Tra-Mec(phylum)}
+library(ComplexUpset)
+physeq <-physeq_bac %>%
+
+  subset_samples(Cocoonery_type%in% c("traditional_cocoonery","mechanized_cocoonery"))
+
+physeq <-physeq %>% 
+  prune_taxa(taxa_sums(.)/sum(sample_sums(.)) > 0.0001,.) %>%  
+  binary_otu() %>% merge_samples2("Cocoonery_type",sum,unique) %>% 
+  prune_taxa(taxa_sums(.)>0,.) #去除低丰度数据
+
+otu<- otu_table(physeq) %>% data.frame();otu[otu!=0]<-1 
+
+percent <- physeq %>%
+  psmelt()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(Abundance)) %>%
+  ungroup()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(total_count)) %>%
+  mutate(percentage = total_count / sum(total_count) * 100) %>% 
+  data.frame()
+
+high_abundance_Phylum <- percent[percent$percentage>2,]$Phylum
+tax_table_physeq <- tax_table(physeq) %>% data.frame()
+tax_table_physeq$Phylum[!(tax_table_physeq$Phylum %in% high_abundance_Phylum)] <- "others"
+#将低丰度的门命名为其他
+otu<- otu %>% mutate(Phylum=tax_table_physeq[rownames(otu),]$Phylum)
+
+col_microbes_Phylum <- c( "Proteobacteria","Firmicutes","Actinobacteriota","Bacteroidota","Cyanobacteria","others" )
+otu$Phylum <- factor(otu$Phylum, levels = col_microbes_Phylum)
+names(col_microbes_Phylum) <- col_microbes_Phylum
+col_microbes_Phylum[]<- c("#00CCFF","#FFA07A","#F0E68C","#00CC99","#FAFAD2","#CCCCCC")
+
+group1 <- c("traditional_cocoonery","mechanized_cocoonery")
+ComplexUpset::upset(otu, group1,min_size= 3,
+                    n_intersections = 15,
+                    width_ratio = 0.2,
+                    height_ratio = 0.5,
+                    sort_intersections_by = c("cardinality"),#按集合中的数量排序
+                    sort_intersections = c("descending"), #descending为倒序
+                    group_by = "degree",
+                    base_annotations = list("Asv in\nintersection"=intersection_size(text=list(size=3))),
+                    annotations = list( "Phylum in\nintersection" = list( 
+                      aes=aes(x=intersection, fill = Phylum),
+                      geom=list(geom_bar(stat = "count", position = position_fill(reverse = T),na.rm = T),
+                                scale_fill_manual(values=col_microbes_Phylum),
+                                scale_y_continuous(labels = scales::percent_format()),
+                                theme_bw(),
+                                theme(axis.text.x = element_blank(),
+                                      axis.ticks.x = element_blank(),
+                                      axis.title.x = element_blank(),
+                                      legend.position = "top",
+                                      text = element_text(size = 10)),
+                                labs(title = "",fill="Phylum"),
+                                guides(fill=guide_legend(nrow = 2,override.aes = list(keyheight=0.75)))
+                                )))
+                    )
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/complexupset_tra-mec.pdf",width = 12,height = 10)
+```
+
+```{r ComplexUpset1.2 clean-dirty(phylum)}
+library(ComplexUpset)
+physeq <-physeq_bac %>%
+
+  subset_samples(Cocoonery_type%in% c("mechanized_cocoonery","Pre"))
+
+physeq <-physeq %>% 
+  prune_taxa(taxa_sums(.)/sum(sample_sums(.)) > 0.0001,.) %>%  
+  binary_otu() %>% merge_samples2("Cocoonery_type",sum,unique) %>% 
+  prune_taxa(taxa_sums(.)>0,.) #去除低丰度数据
+
+otu<- otu_table(physeq) %>% data.frame();otu[otu!=0]<-1 
+
+percent <- physeq %>%
+  psmelt()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(Abundance)) %>%
+  ungroup()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(total_count)) %>%
+  mutate(percentage = total_count / sum(total_count) * 100) %>% 
+  data.frame()
+
+high_abundance_Phylum <- percent[percent$percentage>2,]$Phylum
+tax_table_physeq <- tax_table(physeq) %>% data.frame()
+tax_table_physeq$Phylum[!(tax_table_physeq$Phylum %in% high_abundance_Phylum)] <- "others"
+#将低丰度的门命名为其他
+otu<- otu %>% mutate(Phylum=tax_table_physeq[rownames(otu),]$Phylum)
+
+col_microbes_Phylum <- c( "Proteobacteria","Firmicutes","Actinobacteriota","Bacteroidota","Cyanobacteria","others" )
+otu$Phylum <- factor(otu$Phylum, levels = col_microbes_Phylum)
+names(col_microbes_Phylum) <- col_microbes_Phylum
+col_microbes_Phylum[]<- c("#00CCFF","#FFA07A","#F0E68C","#00CC99","#FAFAD2","#CCCCCC")
+
+group1 <- c("mechanized_cocoonery","Pre")
+ComplexUpset::upset(otu, group1,min_size= 3,
+                    n_intersections = 15,
+                    width_ratio = 0.2,
+                    height_ratio = 0.5,
+                    sort_intersections_by = c("cardinality"),#按集合中的数量排序
+                    sort_intersections = c("descending"), #descending为倒序
+                    group_by = "degree",
+                    base_annotations = list("Asv in\nintersection"=intersection_size(text=list(size=3))),
+                    annotations = list( "Phylum in\nintersection" = list( 
+                      aes=aes(x=intersection, fill = Phylum),
+                      geom=list(geom_bar(stat = "count", position = position_fill(reverse = T),na.rm = T),
+                                scale_fill_manual(values=col_microbes_Phylum),
+                                scale_y_continuous(labels = scales::percent_format()),
+                                theme_bw(),
+                                theme(axis.text.x = element_blank(),
+                                      axis.ticks.x = element_blank(),
+                                      axis.title.x = element_blank(),
+                                      legend.position = "top",
+                                      text = element_text(size = 10)),
+                                labs(title = "",fill="Phylum"),
+                                guides(fill=guide_legend(nrow = 2,override.aes = list(keyheight=0.75)))
+                                )))
+                    )
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/complexupset_clean-dirty.pdf",width = 12,height = 10)
+```
+
+```{r ComplexUpset1.3 0h-72h(phylum)}
+library(ComplexUpset)
+physeq <-physeq_bac %>%
+
+  subset_samples(Cocoonery_type%in% c("mechanized_cocoonery","mechanized_cocoonery_3"))
+
+physeq <-physeq %>% 
+  prune_taxa(taxa_sums(.)/sum(sample_sums(.)) > 0.0001,.) %>%  
+  binary_otu() %>% merge_samples2("Cocoonery_type",sum,unique) %>% 
+  prune_taxa(taxa_sums(.)>0,.) #去除低丰度数据
+
+otu<- otu_table(physeq) %>% data.frame();otu[otu!=0]<-1 
+
+percent <- physeq %>%
+  psmelt()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(Abundance)) %>%
+  ungroup()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(total_count)) %>%
+  mutate(percentage = total_count / sum(total_count) * 100) %>% 
+  data.frame()
+
+high_abundance_Phylum <- percent[percent$percentage>2,]$Phylum
+tax_table_physeq <- tax_table(physeq) %>% data.frame()
+tax_table_physeq$Phylum[!(tax_table_physeq$Phylum %in% high_abundance_Phylum)] <- "others"
+#将低丰度的门命名为其他
+otu<- otu %>% mutate(Phylum=tax_table_physeq[rownames(otu),]$Phylum)
+
+col_microbes_Phylum <- c( "Proteobacteria","Firmicutes","Actinobacteriota","Bacteroidota","Cyanobacteria","others" )
+otu$Phylum <- factor(otu$Phylum, levels = col_microbes_Phylum)
+names(col_microbes_Phylum) <- col_microbes_Phylum
+col_microbes_Phylum[]<- c("#00CCFF","#FFA07A","#F0E68C","#00CC99","#FAFAD2","#CCCCCC")
+
+group1 <- c("mechanized_cocoonery","mechanized_cocoonery_3")
+ComplexUpset::upset(otu, group1,min_size= 3,
+                    n_intersections = 15,
+                    width_ratio = 0.2,
+                    height_ratio = 0.5,
+                    sort_intersections_by = c("cardinality"),#按集合中的数量排序
+                    sort_intersections = c("descending"), #descending为倒序
+                    group_by = "degree",
+                    base_annotations = list("Asv in\nintersection"=intersection_size(text=list(size=3))),
+                    annotations = list( "Phylum in\nintersection" = list( 
+                      aes=aes(x=intersection, fill = Phylum),
+                      geom=list(geom_bar(stat = "count", position = position_fill(reverse = T),na.rm = T),
+                                scale_fill_manual(values=col_microbes_Phylum),
+                                scale_y_continuous(labels = scales::percent_format()),
+                                theme_bw(),
+                                theme(axis.text.x = element_blank(),
+                                      axis.ticks.x = element_blank(),
+                                      axis.title.x = element_blank(),
+                                      legend.position = "top",
+                                      text = element_text(size = 10)),
+                                labs(title = "",fill="Phylum"),
+                                guides(fill=guide_legend(nrow = 2,override.aes = list(keyheight=0.75)))
+                                )))
+                    )
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/complexupset_0h-72h.pdf",width = 12,height = 10)
+```
+
+```{r ComplexUpset2 O1side(phylum)}
+library(ComplexUpset)
+physeq <-physeq_bac %>% 
+  subset_samples(Group%in% c("H2O","WW","KB","MCFA"))
+
+physeq <-physeq %>% 
+  prune_taxa(taxa_sums(.)/sum(sample_sums(.)) > 0.0001,.) %>%  
+  binary_otu() %>% merge_samples2("Group",sum,unique) %>% 
+  prune_taxa(taxa_sums(.)>0,.) #去除低丰度数据
+
+otu<- otu_table(physeq) %>% data.frame();otu[otu!=0]<-1 
+
+percent <- physeq %>%
+  psmelt()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(Abundance)) %>%
+  ungroup()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(total_count)) %>%
+  mutate(percentage = total_count / sum(total_count) * 100) %>% 
+  data.frame()
+
+high_abundance_Phylum <- percent[percent$percentage>2,]$Phylum
+tax_table_physeq <- tax_table(physeq) %>% data.frame()
+tax_table_physeq$Phylum[!(tax_table_physeq$Phylum %in% high_abundance_Phylum)] <- "others"
+#将低丰度的门命名为其他
+otu<- otu %>% mutate(Phylum=tax_table_physeq[rownames(otu),]$Phylum)
+
+col_microbes_Phylum <- c( "Proteobacteria","Firmicutes","Actinobacteriota","Bacteroidota","Cyanobacteria","others" )
+otu$Phylum <- factor(otu$Phylum, levels = col_microbes_Phylum)
+names(col_microbes_Phylum) <- col_microbes_Phylum
+col_microbes_Phylum[]<- c("#00CCFF","#FFA07A","#F0E68C","#00CC99","#FAFAD2","#CCCCCC")
+
+group1 <- c("H2O","WW","KB","MCFA")
+ComplexUpset::upset(otu, group1,min_size= 3,
+                    n_intersections = 15,
+                    width_ratio = 0.2,
+                    height_ratio = 0.5,
+                    sort_intersections_by = c("cardinality"),#按集合中的数量排序
+                    sort_intersections = c("descending"), #descending为倒序
+                    group_by = "degree",
+                    base_annotations = list("Asv in\nintersection"=intersection_size(text=list(size=3))),
+                    annotations = list( "Phylum in\nintersection" = list( 
+                      aes=aes(x=intersection, fill = Phylum),
+                      geom=list(geom_bar(stat = "count", position = position_fill(reverse = T),na.rm = T),
+                                scale_fill_manual(values=col_microbes_Phylum),
+                                scale_y_continuous(labels = scales::percent_format()),
+                                theme_bw(),
+                                theme(axis.text.x = element_blank(),
+                                      axis.ticks.x = element_blank(),
+                                      axis.title.x = element_blank(),
+                                      legend.position = "top",
+                                      text = element_text(size = 10)),
+                                labs(title = "",fill="Phylum"),
+                                guides(fill=guide_legend(nrow = 2,override.aes = list(keyheight=0.75)))
+                                )))
+                    )
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/complexupset_O1side.pdf",width = 12,height = 10)
+```
+
+```{r ComplexUpset3 pre-post(phylum)}
+library(ComplexUpset)
+physeq <-physeq_bac %>%
+
+  subset_samples(Cocoonery_type%in% c("Pre","AWW","BKB","CMCFA"))
+
+physeq <-physeq %>% 
+  prune_taxa(taxa_sums(.)/sum(sample_sums(.)) > 0.0001,.) %>%  
+  binary_otu() %>% merge_samples2("Cocoonery_type",sum,unique) %>% 
+  prune_taxa(taxa_sums(.)>0,.) #去除低丰度数据
+
+otu<- otu_table(physeq) %>% data.frame();otu[otu!=0]<-1 
+
+percent <- physeq %>%
+  psmelt()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(Abundance)) %>%
+  ungroup()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(total_count)) %>%
+  mutate(percentage = total_count / sum(total_count) * 100) %>% 
+  data.frame()
+
+high_abundance_Phylum <- percent[percent$percentage>2,]$Phylum
+tax_table_physeq <- tax_table(physeq) %>% data.frame()
+tax_table_physeq$Phylum[!(tax_table_physeq$Phylum %in% high_abundance_Phylum)] <- "others"
+#将低丰度的门命名为其他
+otu<- otu %>% mutate(Phylum=tax_table_physeq[rownames(otu),]$Phylum)
+
+col_microbes_Phylum <- c( "Proteobacteria","Firmicutes","Actinobacteriota","Bacteroidota","Cyanobacteria","others" )
+otu$Phylum <- factor(otu$Phylum, levels = col_microbes_Phylum)
+names(col_microbes_Phylum) <- col_microbes_Phylum
+col_microbes_Phylum[]<- c("#00CCFF","#FFA07A","#F0E68C","#00CC99","#FAFAD2","#CCCCCC")
+
+group1 <- c("Pre","AWW","BKB","CMCFA")
+ComplexUpset::upset(otu, group1,min_size= 3,
+                    n_intersections = 15,
+                    width_ratio = 0.2,
+                    height_ratio = 0.5,
+                    sort_intersections_by = c("cardinality"),#按集合中的数量排序
+                    sort_intersections = c("descending"), #descending为倒序
+                    group_by = "degree",
+                    base_annotations = list("Asv in\nintersection"=intersection_size(text=list(size=3))),
+                    annotations = list( "Phylum in\nintersection" = list( 
+                      aes=aes(x=intersection, fill = Phylum),
+                      geom=list(geom_bar(stat = "count", position = position_fill(reverse = T),na.rm = T),
+                                scale_fill_manual(values=col_microbes_Phylum),
+                                scale_y_continuous(labels = scales::percent_format()),
+                                theme_bw(),
+                                theme(axis.text.x = element_blank(),
+                                      axis.ticks.x = element_blank(),
+                                      axis.title.x = element_blank(),
+                                      legend.position = "top",
+                                      text = element_text(size = 10)),
+                                labs(title = "",fill="Phylum"),
+                                guides(fill=guide_legend(nrow = 2,override.aes = list(keyheight=0.75)))
+                                )))
+                    )
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/complexupset_pre-post.pdf",width = 12,height = 10)
+```
+
+
+```{r ComplexUpset JXHN(Phylum)}
+col_phylum <- c( "#FFD700", "#4F94CD", "#FFA500", "#7B68EE", "#CD1076", "#E23900", "#FB5F2F", "#191970",
+               "#D57580", "#D15FEE", "#800000", "#F0E68C", "#FFA07A", "#FFC115", "#87CEFA", "#006400",
+               "#CD1076", "#8DEEEE", "#FAFAD2", "#ADD8E6", "#F08080", "#002c53", "#7B68EE", "#A020F0",
+               "#FFB6C1", "#FFA07A", "#20B2AA", "#f74d4d", "#ffbd66", "#0c84c6", "#ffa510", "#7B68EE",
+               "#006b7b", "#EE7600", "#800080", "#CD0000", "#FFD700" )
+
+library(ComplexUpset)
+physeq <-physeq_bac %>%
+  subset_samples(Group%in% c("MA","IS","TB","TE","CA","OS","OD","BB","LT","LS","LE"))
+
+physeq <-physeq %>% 
+  prune_taxa(taxa_sums(.)/sum(sample_sums(.)) > 0.0001,.) %>%  
+  binary_otu() %>% merge_samples2("Group",sum,unique) %>% 
+  prune_taxa(taxa_sums(.)>0,.) #去除低丰度数据
+
+otu<- otu_table(physeq) %>% data.frame();otu[otu!=0]<-1 
+
+percent <- physeq %>%
+  psmelt()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(Abundance)) %>%
+  ungroup()%>%
+  group_by(Phylum) %>%
+  summarise(total_count = sum(total_count)) %>%
+  mutate(percentage = total_count / sum(total_count) * 100) %>% 
+  data.frame()
+
+high_abundance_Phylum <- percent[percent$percentage>0.1,]$Phylum #percentage值越小，显示的门数量越多
+tax_table_physeq <- tax_table(physeq) %>% data.frame()
+tax_table_physeq$Phylum[!(tax_table_physeq$Phylum %in% high_abundance_Phylum)] <- "others"
+#将低丰度的门命名为其他
+otu<- otu %>% mutate(Phylum=tax_table_physeq[rownames(otu),]$Phylum)
+
+group1 <- c("MA","IS","TB","TE","CA","OS","OD","BB","LT","LS","LE")
+ComplexUpset::upset(otu, group1,min_size= 3, #min_size参数控制在图表中显示的最小集合大小
+                    n_intersections = 15,
+                    width_ratio = 0.2,
+                    height_ratio = 0.5,
+                    sort_intersections_by = c("cardinality"),#按集合中的数量排序
+                    sort_intersections = c("descending"), #descending为倒序
+                    group_by = "degree",
+                    base_annotations = list("Asv in\nintersection"=intersection_size(text=list(size=3))),
+                    annotations = list( "Phylum in\nintersection" = list( 
+                      aes=aes(x=intersection, fill = Phylum),
+                      geom=list(geom_bar(stat = "count", position = position_fill(reverse = T),na.rm = T),
+                                scale_fill_manual(values=col_phylum),
+                                scale_y_continuous(labels = scales::percent_format()),
+                                theme_bw(),
+                                theme(axis.text.x = element_blank(),
+                                      axis.ticks.x = element_blank(),
+                                      axis.title.x = element_blank(),
+                                      legend.position = "top",
+                                      text = element_text(size = 10)),
+                                labs(title = "",fill="Phylum"),
+                                guides(fill=guide_legend(nrow = 2,override.aes = list(keyheight=0.75)))
+                                )))
+                    )
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/complexupset_preOF1T1.pdf",width = 12,height = 10)
+```
+
+```{r ComplexUpset JXHN(Genus)}
+# 定义颜色向量，用于表示不同属（Genus）
+col_genus <- c("#FFD700", "#4F94CD", "#FFA500", "#7B68EE", "#CD1076", "#E23900", "#FB5F2F", "#191970",
+               "#D57580", "#D15FEE", "#800000", "#F0E68C", "#FFA07A", "#FFC115", "#87CEFA", "#006400",
+               "#CD1076", "#8DEEEE", "#FAFAD2", "#ADD8E6", "#F08080", "#002c53", "#7B68EE",
+               "#FFB6C1", "#FFA07A", "#20B2AA", "#f74d4d", "#ffbd66", "#0c84c6", "#ffa510", "#7B68EE",
+               "#006b7b", "#EE7600", "#800080", "#CD0000", "#FFD700", "#A020F0")
+
+# 导入ComplexUpset包
+library(ComplexUpset)
+
+# 从physeq_bac数据中筛选样本组(Group)为"MA","IS","TB","TE","CA","OS","OD","BB","LT","LS","LE"的数据
+physeq <- physeq_bac %>%
+  subset_samples(Group %in% c("MA", "IS", "TB", "TE", "CA", "OS", "OD", "BB", "LT", "LS", "LE"))
+
+# 对physeq进行一系列数据处理，包括去除低丰度数据等
+physeq <- physeq %>%
+  prune_taxa(taxa_sums(.)/sum(sample_sums(.)) > 0.0001, .) %>%
+  binary_otu() %>%
+  merge_samples2("Group", sum, unique) %>%
+  prune_taxa(taxa_sums(.) > 0, .)
+
+# 生成二元矩阵otu，表示样本中是否存在某OTU
+otu <- otu_table(physeq) %>% data.frame()
+otu[otu != 0] <- 1
+
+# 计算各属的相对丰度
+percent <- physeq %>%
+  psmelt() %>%
+  group_by(Genus) %>%
+  summarise(total_count = sum(Abundance)) %>%
+  ungroup() %>%
+  group_by(Genus) %>%
+  summarise(total_count = sum(total_count)) %>%
+  mutate(percentage = total_count / sum(total_count) * 100) %>%
+  data.frame()
+
+# 选择相对丰度大于2%的属
+high_abundance_Genus <- percent[percent$percentage > 0.1, ]$Genus #percentage值越小，显示的属数量越多
+
+# 获取tax_table，并将低丰度的属命名为"others"
+tax_table_physeq <- tax_table(physeq) %>% data.frame()
+tax_table_physeq$Genus[!(tax_table_physeq$Genus %in% high_abundance_Genus)] <- "others"
+
+# 将低丰度属的信息添加到otu中
+otu <- otu %>% mutate(Genus = tax_table_physeq[rownames(otu), ]$Genus)
+
+# 定义样本组
+group1 <- c("MA", "IS", "TB", "TE", "CA", "OS", "OD", "BB", "LT", "LS", "LE")
+
+# 使用ComplexUpset包进行集合关系可视化
+ComplexUpset::upset(
+  otu, group1, min_size = 1,  #in_size参数控制在图表中显示的最小集合大小
+  n_intersections = 15,
+  width_ratio = 0.2,
+  height_ratio = 0.5,
+  sort_intersections_by = c("cardinality"),  # 按集合中的数量排序
+  sort_intersections = c("descending"),  # descending为倒序
+  group_by = "degree",
+  base_annotations = list("Asv in\nintersection" = intersection_size(text = list(size = 3))),
+  annotations = list("Genus in\nintersection" = list(
+    aes = aes(x = intersection, fill = Genus),
+    geom = list(geom_bar(stat = "count", position = position_fill(reverse = T), na.rm = T),
+                scale_fill_manual(values = col_genus),
+                scale_y_continuous(labels = scales::percent_format()),
+                theme_bw(),
+                theme(axis.text.x = element_blank(),
+                      axis.ticks.x = element_blank(),
+                      axis.title.x = element_blank(),
+                      legend.position = "top",
+                      text = element_text(size = 10)),
+                labs(title = "", fill = "Genus"),
+                guides(fill = guide_legend(nrow = 2, override.aes = list(keyheight = 0.75)))
+    )))
+)
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/complexupset_JXHN.pdf",width = 12,height = 10)
+```
+
+
+
+
+
+```{r assembly processes1 tra-mec}
+col_process <- c("#ef1828","#f88421","#ffbc14","#006b7b")
+physeq<-physeq_bac
+
+
+group_name <- c("traditional_cocoonery","mechanized_cocoonery")
+group_head<-"Cocoonery_type"
+dir.create("tmp") #dir.create()函数表示创建新目录
+
+library(iCAMP)
+icamp_results<-list()
+icamp_table<-list()
+tmp_icamp<-list()
+list_physeq <- list(Bac=physeq_bac)
+
+
+for(pri in c("Bac")){
+  physeq<-list_physeq[[pri]] 
+  icamp_table[[pri]]<-list()
+  group <- microbiome::meta(physeq)
+  for (i in group_name) {
+    tmp<-prune_samples( sample_data( physeq )[[ group_head ]]==i,physeq) %>% prune_taxa(taxa_sums(.)>0, .)#大于多少到时候可以改
+    phy<-phy_tree(tmp)
+    t_otu<-as.data.frame(t(otu_table(tmp)))
+    print(i)
+    dir.create(paste0("tmp/",pri,i))
+    tmp_icamp[[i]]<- icamp.big(t_otu,phy,nworker = 16,bin.size.limit = 24,pd.wd = paste0("tmp/",pri,i))#icamp.big（）是icamp包主函数，用于计算
+    icamp_table[[pri]][[i]]<-colMeans(tmp_icamp[[i]]$CbMPDiCBraya[,3:7])
+  }
+  icamp_results[[pri]]<-tmp_icamp
+  icamp_table[[pri]]<-do.call(rbind,icamp_table[[pri]])[,1:5] %>% as.data.frame() %>% mutate(primer=pri, Habitat=group_name)
+};rm(tmp_icamp)
+
+
+tmp<-list()
+group_name<-group_name
+for(i in 1:1){
+  tmp[[i]]<-list()
+  for(j in 1:length(group_name)){
+    pri<-c("Bac")[i]
+    tmp[[i]][[j]] <- icamp_results[[pri]][[ group_name[j] ]]$CbMPDiCBraya %>% 
+      mutate(primer=pri, sample_type= group_name[j])
+  }
+  tmp[[i]]<-do.call(rbind,tmp[[i]])
+}
+
+df<-do.call(rbind,tmp) %>% mutate(Selection=Heterogeneous.Selection+Homogeneous.Selection)
+df$cocoonery_type <- factor(df$sample_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+# compare_means(data=df,Selection~Habitat)
+df<-df %>% melt()
+df$variable<-str_replace(df$variable,"[.]", " ")#将.去除
+df$cocoonery_type <- factor(df$cocoonery_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+
+#柱状图
+df <- df %>%
+  filter(!variable%in% c("Heterogeneous Selection", "Homogeneous Selection"))
+df_summarized <- df %>%
+  mutate(primer_cocoonery_type = paste(primer, cocoonery_type, sep = "_"))%>%
+  group_by(primer_cocoonery_type,variable) %>%
+  summarise(totalvalue = sum(value)) %>% 
+  mutate(percentage = totalvalue / sum(totalvalue) * 100) %>% 
+  data.frame()
+
+#df_summarized <- df_summarized [c(1:8),]  #上面为了不改变代码跑了两遍（Bac=physeq_bac,Fun=physeq_bac），所以直接作图会有重复的结果，此处df_summarized原有2n个结果，前后重复，只需要取前n个作图即可，可直接在下面控制台用df_summarized 查看2n具体数值（此处2n=16，n=8）
+
+df_summarized %>% ggplot() +
+  geom_col(aes(x=primer_cocoonery_type,y=percentage,fill=variable),width = 0.85) +
+  scale_fill_manual(values = col_process)+
+  scale_y_continuous(breaks = seq(0, 100, by = 25)) +
+  scale_y_continuous(expand = c(0,0))+ #去掉x轴上方的空白区域
+  labs(y = "Percentage")+
+  labs(x = "Community Building")+
+  labs(fill = "Processes ")+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/Community building_tra&mec.pdf",width = 6,height = 4) 
+
+```
+
+```{r assembly processes1.2 clean-dirty}
+col_process <- c("#ef1828","#f88421","#ffbc14","#006b7b")
+physeq<-physeq_bac
+
+
+group_name <- c("mechanized_cocoonery","Pre")
+group_head<-"Cocoonery_type"
+dir.create("tmp") #dir.create()函数表示创建新目录
+
+library(iCAMP)
+icamp_results<-list()
+icamp_table<-list()
+tmp_icamp<-list()
+list_physeq <- list(Bac=physeq_bac)
+
+
+for(pri in c("Bac")){
+  physeq<-list_physeq[[pri]] 
+  icamp_table[[pri]]<-list()
+  group <- microbiome::meta(physeq)
+  for (i in group_name) {
+    tmp<-prune_samples( sample_data( physeq )[[ group_head ]]==i,physeq) %>% prune_taxa(taxa_sums(.)>0, .)#大于多少到时候可以改
+    phy<-phy_tree(tmp)
+    t_otu<-as.data.frame(t(otu_table(tmp)))
+    print(i)
+    dir.create(paste0("tmp/",pri,i))
+    tmp_icamp[[i]]<- icamp.big(t_otu,phy,nworker = 16,bin.size.limit = 24,pd.wd = paste0("tmp/",pri,i))#icamp.big（）是icamp包主函数，用于计算
+    icamp_table[[pri]][[i]]<-colMeans(tmp_icamp[[i]]$CbMPDiCBraya[,3:7])
+  }
+  icamp_results[[pri]]<-tmp_icamp
+  icamp_table[[pri]]<-do.call(rbind,icamp_table[[pri]])[,1:5] %>% as.data.frame() %>% mutate(primer=pri, Habitat=group_name)
+};rm(tmp_icamp)
+
+
+tmp<-list()
+group_name<-group_name
+for(i in 1:1){
+  tmp[[i]]<-list()
+  for(j in 1:length(group_name)){
+    pri<-c("Bac")[i]
+    tmp[[i]][[j]] <- icamp_results[[pri]][[ group_name[j] ]]$CbMPDiCBraya %>% 
+      mutate(primer=pri, sample_type= group_name[j])
+  }
+  tmp[[i]]<-do.call(rbind,tmp[[i]])
+}
+
+df<-do.call(rbind,tmp) %>% mutate(Selection=Heterogeneous.Selection+Homogeneous.Selection)
+df$cocoonery_type <- factor(df$sample_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+# compare_means(data=df,Selection~Habitat)
+df<-df %>% melt()
+df$variable<-str_replace(df$variable,"[.]", " ")#将.去除
+df$cocoonery_type <- factor(df$cocoonery_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+
+#柱状图
+df <- df %>%
+  filter(!variable%in% c("Heterogeneous Selection", "Homogeneous Selection"))
+df_summarized <- df %>%
+  mutate(primer_cocoonery_type = paste(primer, cocoonery_type, sep = "_"))%>%
+  group_by(primer_cocoonery_type,variable) %>%
+  summarise(totalvalue = sum(value)) %>% 
+  mutate(percentage = totalvalue / sum(totalvalue) * 100) %>% 
+  data.frame()
+
+#df_summarized <- df_summarized [c(1:8),]  #上面为了不改变代码跑了两遍（Bac=physeq_bac,Fun=physeq_bac），所以直接作图会有重复的结果，此处df_summarized原有2n个结果，前后重复，只需要取前n个作图即可，可直接在下面控制台用df_summarized 查看2n具体数值（此处2n=16，n=8）
+
+df_summarized %>% ggplot() +
+  geom_col(aes(x=primer_cocoonery_type,y=percentage,fill=variable),width = 0.85) +
+  scale_fill_manual(values = col_process)+
+  scale_y_continuous(breaks = seq(0, 100, by = 25)) +
+  scale_y_continuous(expand = c(0,0))+ #去掉x轴上方的空白区域
+  labs(y = "Percentage")+
+  labs(x = "Community Building")+
+  labs(fill = "Processes ")+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/Community building_clean-dirty.pdf",width = 6,height = 4) 
+
+```
+
+```{r assembly processes1.3 0h-72h}
+col_process <- c("#ef1828","#f88421","#ffbc14","#006b7b")
+physeq<-physeq_bac
+
+
+group_name <- c("mechanized_cocoonery","mechanized_cocoonery_3")
+group_head<-"Cocoonery_type"
+dir.create("tmp") #dir.create()函数表示创建新目录
+
+library(iCAMP)
+icamp_results<-list()
+icamp_table<-list()
+tmp_icamp<-list()
+list_physeq <- list(Bac=physeq_bac)
+
+
+for(pri in c("Bac")){
+  physeq<-list_physeq[[pri]] 
+  icamp_table[[pri]]<-list()
+  group <- microbiome::meta(physeq)
+  for (i in group_name) {
+    tmp<-prune_samples( sample_data( physeq )[[ group_head ]]==i,physeq) %>% prune_taxa(taxa_sums(.)>0, .)#大于多少到时候可以改
+    phy<-phy_tree(tmp)
+    t_otu<-as.data.frame(t(otu_table(tmp)))
+    print(i)
+    dir.create(paste0("tmp/",pri,i))
+    tmp_icamp[[i]]<- icamp.big(t_otu,phy,nworker = 16,bin.size.limit = 24,pd.wd = paste0("tmp/",pri,i))#icamp.big（）是icamp包主函数，用于计算
+    icamp_table[[pri]][[i]]<-colMeans(tmp_icamp[[i]]$CbMPDiCBraya[,3:7])
+  }
+  icamp_results[[pri]]<-tmp_icamp
+  icamp_table[[pri]]<-do.call(rbind,icamp_table[[pri]])[,1:5] %>% as.data.frame() %>% mutate(primer=pri, Habitat=group_name)
+};rm(tmp_icamp)
+
+
+tmp<-list()
+group_name<-group_name
+for(i in 1:1){  #1:2改成1:1
+  tmp[[i]]<-list()
+  for(j in 1:length(group_name)){
+    pri<-c("Bac")[i]
+    tmp[[i]][[j]] <- icamp_results[[pri]][[ group_name[j] ]]$CbMPDiCBraya %>% 
+      mutate(primer=pri, sample_type= group_name[j])
+  }
+  tmp[[i]]<-do.call(rbind,tmp[[i]])
+}
+
+df<-do.call(rbind,tmp) %>% mutate(Selection=Heterogeneous.Selection+Homogeneous.Selection)
+df$cocoonery_type <- factor(df$sample_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+
+df<-df %>% melt()
+df$variable<-str_replace(df$variable,"[.]", " ")#将.去除,Others处仍需手动删掉
+df$cocoonery_type <- factor(df$cocoonery_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+
+#柱状图
+df <- df %>%
+  filter(!variable%in% c("Heterogeneous Selection", "Homogeneous Selection"))
+df_summarized <- df %>%
+  mutate(primer_cocoonery_type = paste(primer, cocoonery_type, sep = "_"))%>%
+  group_by(primer_cocoonery_type,variable) %>%
+  summarise(totalvalue = sum(value)) %>% 
+  mutate(percentage = totalvalue / sum(totalvalue) * 100) %>% 
+  data.frame()
+
+df_summarized %>% ggplot() +
+  geom_col(aes(x=primer_cocoonery_type,y=percentage,fill=variable),width = 0.85) +
+  scale_fill_manual(values = col_process)+
+  scale_y_continuous(breaks = seq(0, 100, by = 25)) +
+  scale_y_continuous(expand = c(0,0))+ #去掉x轴上方的空白区域
+  labs(y = "Percentage")+
+  labs(x = "Community Building")+
+  labs(fill = "Processes ")+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/Community building_0h-72h.pdf",width = 6,height = 4) 
+```
+
+```{r assembly processes2 O1side}
+col_process <- c("#ef1828","#f88421","#ffbc14","#006b7b")
+physeq<-physeq_bac
+
+
+group_name <- c("H2O","WW","KB","MCFA")
+group_head<-"Cocoonery_type"
+dir.create("tmp") #dir.create()函数表示创建新目录
+
+library(iCAMP)
+icamp_results<-list()
+icamp_table<-list()
+tmp_icamp<-list()
+list_physeq <- list(Bac=physeq_bac)
+
+
+for(pri in c("Bac")){
+  physeq<-list_physeq[[pri]] 
+  icamp_table[[pri]]<-list()
+  group <- microbiome::meta(physeq)
+  for (i in group_name) {
+    tmp<-prune_samples( sample_data( physeq )[[ group_head ]]==i,physeq) %>% prune_taxa(taxa_sums(.)>0, .)#大于多少到时候可以改
+    phy<-phy_tree(tmp)
+    t_otu<-as.data.frame(t(otu_table(tmp)))
+    print(i)
+    dir.create(paste0("tmp/",pri,i))
+    tmp_icamp[[i]]<- icamp.big(t_otu,phy,nworker = 16,bin.size.limit = 24,pd.wd = paste0("tmp/",pri,i))#icamp.big（）是icamp包主函数，用于计算
+    icamp_table[[pri]][[i]]<-colMeans(tmp_icamp[[i]]$CbMPDiCBraya[,3:7])
+  }
+  icamp_results[[pri]]<-tmp_icamp
+  icamp_table[[pri]]<-do.call(rbind,icamp_table[[pri]])[,1:5] %>% as.data.frame() %>% mutate(primer=pri, Habitat=group_name)
+};rm(tmp_icamp)
+
+
+tmp<-list()
+group_name<-group_name
+for(i in 1:1){
+  tmp[[i]]<-list()
+  for(j in 1:length(group_name)){
+    pri<-c("Bac")[i]
+    tmp[[i]][[j]] <- icamp_results[[pri]][[ group_name[j] ]]$CbMPDiCBraya %>% 
+      mutate(primer=pri, sample_type= group_name[j])
+  }
+  tmp[[i]]<-do.call(rbind,tmp[[i]])
+}
+
+df<-do.call(rbind,tmp) %>% mutate(Selection=Heterogeneous.Selection+Homogeneous.Selection)
+df$cocoonery_type <- factor(df$sample_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+# compare_means(data=df,Selection~Habitat)
+df<-df %>% melt()
+df$variable<-str_replace(df$variable,"[.]", " ")#将.去除
+df$cocoonery_type <- factor(df$cocoonery_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+
+#柱状图
+df <- df %>%
+  filter(!variable%in% c("Heterogeneous Selection", "Homogeneous Selection"))
+df_summarized <- df %>%
+  mutate(primer_cocoonery_type = paste(primer, cocoonery_type, sep = "_"))%>%
+  group_by(primer_cocoonery_type,variable) %>%
+  summarise(totalvalue = sum(value)) %>% 
+  mutate(percentage = totalvalue / sum(totalvalue) * 100) %>% 
+  data.frame()
+
+df_summarized %>% ggplot() +
+  geom_col(aes(x=primer_cocoonery_type,y=percentage,fill=variable),width = 0.85) +
+  scale_fill_manual(values = col_process)+
+  scale_y_continuous(breaks = seq(0, 100, by = 25)) +
+  scale_y_continuous(expand = c(0,0))+ #去掉x轴上方的空白区域
+  labs(y = "Percentage")+
+  labs(x = "Community Building")+
+  labs(fill = "Processes ")+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/Community building_O1side_O1side.pdf",width = 6,height = 4) 
+```
+
+```{r assembly processes3 Pre-Post}
+col_process <- c("#ef1828","#f88421","#ffbc14","#006b7b")
+physeq<-physeq_bac
+
+
+group_name <- c("Pre","AWW","BKB","CMCFA")
+group_head<-"Cocoonery_type"
+dir.create("tmp") #dir.create()函数表示创建新目录
+
+library(iCAMP)
+icamp_results<-list()
+icamp_table<-list()
+tmp_icamp<-list()
+list_physeq <- list(Bac=physeq_bac)
+
+
+for(pri in c("Bac")){
+  physeq<-list_physeq[[pri]] 
+  icamp_table[[pri]]<-list()
+  group <- microbiome::meta(physeq)
+  for (i in group_name) {
+    tmp<-prune_samples( sample_data( physeq )[[ group_head ]]==i,physeq) %>% prune_taxa(taxa_sums(.)>0, .)#大于多少到时候可以改
+    phy<-phy_tree(tmp)
+    t_otu<-as.data.frame(t(otu_table(tmp)))
+    print(i)
+    dir.create(paste0("tmp/",pri,i))
+    tmp_icamp[[i]]<- icamp.big(t_otu,phy,nworker = 16,bin.size.limit = 24,pd.wd = paste0("tmp/",pri,i))#icamp.big（）是icamp包主函数，用于计算
+    icamp_table[[pri]][[i]]<-colMeans(tmp_icamp[[i]]$CbMPDiCBraya[,3:7])
+  }
+  icamp_results[[pri]]<-tmp_icamp
+  icamp_table[[pri]]<-do.call(rbind,icamp_table[[pri]])[,1:5] %>% as.data.frame() %>% mutate(primer=pri, Habitat=group_name)
+};rm(tmp_icamp)
+
+
+tmp<-list()
+group_name<-group_name
+for(i in 1:1){  #1:2改成1:1
+  tmp[[i]]<-list()
+  for(j in 1:length(group_name)){
+    pri<-c("Bac")[i]
+    tmp[[i]][[j]] <- icamp_results[[pri]][[ group_name[j] ]]$CbMPDiCBraya %>% 
+      mutate(primer=pri, sample_type= group_name[j])
+  }
+  tmp[[i]]<-do.call(rbind,tmp[[i]])
+}
+
+df<-do.call(rbind,tmp) %>% mutate(Selection=Heterogeneous.Selection+Homogeneous.Selection)
+df$cocoonery_type <- factor(df$sample_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+# compare_means(data=df,Selection~Habitat)
+df<-df %>% melt()
+df$variable<-str_replace(df$variable,"[.]", " ")#将.去除
+df$cocoonery_type <- factor(df$cocoonery_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+
+#柱状图
+df <- df %>%
+  filter(!variable%in% c("Heterogeneous Selection", "Homogeneous Selection"))
+df_summarized <- df %>%
+  mutate(primer_cocoonery_type = paste(primer, cocoonery_type, sep = "_"))%>%
+  group_by(primer_cocoonery_type,variable) %>%
+  summarise(totalvalue = sum(value)) %>% 
+  mutate(percentage = totalvalue / sum(totalvalue) * 100) %>% 
+  data.frame()
+
+#df_summarized <- df_summarized [c(1:16),]  #上面为了不改变代码跑了两遍（Bac=physeq_bac,Fun=physeq_bac），所以直接作图会有重复的结果，此处df_summarized原有2n个结果，前后重复，只需要取前n个作图即可（此处2n=待定）
+
+df_summarized %>% ggplot() +
+  geom_col(aes(x=primer_cocoonery_type,y=percentage,fill=variable),width = 0.85) +
+  scale_fill_manual(values = col_process)+
+  scale_y_continuous(breaks = seq(0, 100, by = 25)) +
+  scale_y_continuous(expand = c(0,0))+ #去掉x轴上方的空白区域
+  labs(y = "Percentage")+
+  labs(x = "Community Building")+
+  labs(fill = "Processes ")+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/Community building_Pre-Post(ABC).pdf",width = 6,height = 4) 
+```
+
+
+
+```{r differential analysis1 tra-mec}
+library(DAtest)
+physeq <- physeq_bac
+
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type%in% c("traditional_cocoonery","mechanized_cocoonery")) 
+physeq <- physeq %>% speedyseq::tax_glom(taxrank = "Genus")
+
+ig <- DA.erq2(physeq,"Cocoonery_type",relative = F)
+dim(ig)
+ig_filter <- ig[ig$pval.adj < 0.05, ]
+ordering_counts <- table(ig_filter$ordering)
+ordering_counts #只算富集的微生物属
+
+#计算富集的核心微生物属数量
+otu <- physeq@otu_table %>% as.data.frame()
+ven1 <- rownames(otu)
+otu[otu!=0] <- 1
+read_frequencies <- apply(otu, 1, function(x) sum(x > 0) / length(x))
+reads_to_keep <- names(read_frequencies[read_frequencies > 0.75])
+# 使用prune_taxa()删除频率小于等于0.75的read
+physeq <- physeq %>% prune_taxa(reads_to_keep, .)
+ig <- DA.erq2(physeq,"Cocoonery_type",relative = F)
+ig_filter <- ig[ig$pval.adj < 0.05, ]
+ordering_counts <- table(ig_filter$ordering)
+ordering_counts 
+#统计富集的，耗尽的，普通的属的数量，输出表格
+
+ven2 <- ig_filter[ig_filter$ordering=="mechanized_cocoonery>traditional_cocoonery",]$Feature
+ven3 <- ig_filter[ig_filter$ordering=="traditional_cocoonery>mechanized_cocoonery",]$Feature
+ven4 <- ig_filter$Feature
+#ven5 <- ven1[!(ven1 %in% ven2)]
+ven5 <- ven1[!(ven1 %in% ven3)]
+venn.plot <- venn.diagram(list(Present=ven5,Enriched=ven4), alpha=0.5,col=c("#006b7b","#006400"),cex.label = 2, ext.text = F,cat.default.pos = "outer", cat.pos = c(-30, 30),cat.dist = c(0.03, 0.02),filename = NULL)
+
+# 
+# ig_filter[ig_filter$ordering=="mechanized_cocoonery>traditional_cocoonery",]$Genus %>%
+# write.csv( file ="C:/Users/99495/Desktop/R_Working directory/Differential analysis results/core_enrich_genus1(mec_tra).csv")
+
+ig_filter[ig_filter$ordering=="traditional_cocoonery>mechanized_cocoonery",]$Genus %>%
+write.csv( file ="C:/Users/99495/Desktop/R_Working directory/Differential analysis results/core_enrich_genus1(tra_mec).csv")
+
+
+```
+
+```{r heatmap1 tra-mec}
+col_cocoonery_type <- c("traditional_cocoonery"="#800080", "mechanized_cocoonery"="#f8766d")
+library(ComplexHeatmap)
+library(circlize)
+physeq <- physeq_bac
+rank="Genus"
+#core_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Differential analysis results/core_enrich_genus1(tra_mec).csv")
+core_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Differential analysis results/core_enrich_genus1(mec_tra).csv")
+#输出到csv时可能格式会有问题，用下面加上差异分析的代码找出来修改(此处列名无Genus，手动加上了）。
+#core <- ig_filter[ig_filter$ordering=="mechanized_cocoonery>traditional_cocoonery",]$Genus %>% as.data.frame()
+core <- ig_filter[ig_filter$ordering=="traditional_cocoonery>mechanized_cocoonery",]$Genus %>% as.data.frame()
+colnames(core) <- c("Genus")
+colnames(core_genus)[2] <- c("Genus")
+anti_join(core, core_genus, by = c("Genus"))
+
+physeq<-physeq_bac %>% subset_taxa(Genus%in%core_genus$Genus) %>% 
+  speedyseq::tax_glom(taxrank = rank) 
+
+
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type%in% c("traditional_cocoonery","mechanized_cocoonery")) 
+
+otu<-otu_table(physeq) %>% as.matrix();rownames(otu)<-data.frame(tax_table(physeq))[,rank];  otu<-log10(otu); otu[is.infinite(otu)]<-NA
+tax<-tax_table(physeq) %>% data.frame %>% mutate(Genus=ifelse(str_detect(Genus," "), str_sub(Genus, str_locate_my_first(Genus, " ",F)) ,Genus)) 
+otu[is.na(otu)] <- 0
+cocoonery_type <- sample_data(physeq)$Cocoonery_type
+tax <- core_genus %>% mutate(Genus=ifelse(str_detect(Genus," "), str_sub(Genus, str_locate_my_first(Genus, " ",F)) ,Genus))
+genus_order <- tax$Genus
+otu <- otu[genus_order, ]
+
+
+col_fun = colorRamp2(c( 0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+sorted_tax <- tax[order(rowMeans(otu, na.rm = TRUE), decreasing = TRUE), ]
+
+Heatmap(otu,name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu),]$Cocoonery_type,col = list(Cocoonery_type=col_cocoonery_type),show_legend = FALSE), 
+        row_labels  = sorted_tax$Genus,
+        heatmap_legend_param=list(title_position = "lefttop-rot",legend_height = unit(6, "cm")),
+       col=c("#F7F7E9","#F3E1AF","#DBBF92","#D78851","#BE5C37","#A13D3B"),
+               cluster_columns = F,cluster_rows = F,clustering_distance_rows="pearson")
+
+
+
+
+#不知道为什么直接用ggsave()或者pdf()输出会打不开pdf，只能手动在图形窗口plots处保存为pdf
+```
+
+
+```{r Silkworm bacterial pathogens heatmap1 tra-mec}
+library(ComplexHeatmap)
+library(circlize)
+
+# 读取silkworm_pathogens_genus.csv文件
+pathogens_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Pathogens/silkworm_pathogens_genus.csv")
+
+# 获取Genus列的数据
+genus <- pathogens_genus$Genus
+
+# 读取physeq_bac数据
+physeq <- physeq_bac
+
+# 将数据筛选为指定的Location和Cocoonery_type的子集
+physeq <- physeq %>%
+  subset_samples(Location %in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type %in% c("traditional_cocoonery", "mechanized_cocoonery")) 
+
+# 将数据再次筛选为包含Genus列中的值的子集
+physeq <- physeq %>% subset_taxa(Genus %in% genus)
+
+# 将相同Genus的行合并成一行，并将它们的相对丰度相加
+physeq <- tax_glom(physeq, taxrank = "Genus")
+
+# 对数据进行处理（这部分代码与原代码相同）
+
+otu <- otu_table(physeq) %>% as.matrix()
+rownames(otu) <- data.frame(tax_table(physeq))[, rank]
+otu <- log10(otu)
+otu[is.infinite(otu)] <- NA
+otu[is.na(otu)] <- 0
+
+tax <- tax_table(physeq) %>% data.frame() %>%
+  mutate(Genus = ifelse(str_detect(Genus, " "), str_sub(Genus, str_locate_my_first(Genus, " ", F)), Genus))
+
+# 以下部分与原代码相同，绘制热图
+col_fun <- colorRamp2(c(0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+Heatmap(otu, name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu), ]$Cocoonery_type, col = list(Cocoonery_type = col_cocoonery_type), show_legend = FALSE),
+        row_labels = tax$Genus,
+        heatmap_legend_param = list(title_position = "lefttop-rot", legend_height = unit(6, "cm")),
+        col = c("#5050a0", "#5b5ea5", "#8c8c74", "#b9bb45", "#F5EC57", "#EEC900"),
+        cluster_columns = FALSE, cluster_rows = FALSE, clustering_distance_rows = "pearson")
+```
+
+```{r Silkworm bacterial pathogens heatmap1.2 clean-dirty}
+library(ComplexHeatmap)
+library(circlize)
+# 读取silkworm_pathogens_genus.csv文件，调用致病菌属名
+pathogens_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Pathogens/silkworm_pathogens_genus.csv")
+
+# 获取Genus列的数据
+genus <- pathogens_genus$Genus
+
+# 读取数据
+physeq <- physeq_bac
+physeq <- physeq %>%
+  subset_samples(Location %in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type %in% c("mechanized_cocoonery", "Pre"))
+
+# 将数据筛选为包含Genus列中的值的子集
+physeq <- physeq %>% subset_taxa(Genus %in% genus)
+# 将相同Genus的行合并成一行，并将它们的相对丰度相加
+physeq <- tax_glom(physeq, taxrank = "Genus")
+
+otu <- otu_table(physeq) %>% as.matrix()
+rownames(otu) <- data.frame(tax_table(physeq))[, rank]
+otu <- log10(otu)
+otu[is.infinite(otu)] <- NA
+otu[is.na(otu)] <- 0
+
+tax <- tax_table(physeq) %>% data.frame() %>%
+  mutate(Genus = ifelse(str_detect(Genus, " "), str_sub(Genus, str_locate_my_first(Genus, " ", F)), Genus))
+
+# 按Genus的顺序重新排列OTU矩阵
+genus_order <- tax$Genus
+otu <- otu[genus_order, ]
+
+# 绘制热图
+col_fun <- colorRamp2(c(0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+Heatmap(otu, name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu), ]$Cocoonery_type, col = list(Cocoonery_type = col_cocoonery_type), show_legend = FALSE),
+        row_labels = tax$Genus,
+        heatmap_legend_param = list(title_position = "lefttop-rot", legend_height = unit(6, "cm")),
+        col = c("#5050a0", "#5b5ea5", "#8c8c74", "#b9bb45", "#F5EC57", "#EEC900"),
+        cluster_columns = FALSE, cluster_rows = FALSE, clustering_distance_rows = "pearson")
+
+```
+
+```{r Silkworm bacterial pathogens heatmap1.3 0h-72h}
+library(ComplexHeatmap)
+library(circlize)
+# 读取silkworm_pathogens_genus.csv文件，调用致病菌属名
+pathogens_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Pathogens/silkworm_pathogens_genus.csv")
+
+# 获取Genus列的数据
+genus <- pathogens_genus$Genus
+
+# 读取数据
+physeq <- physeq_bac
+physeq <- physeq %>%
+  subset_samples(Location %in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type %in% c("mechanized_cocoonery", "mechanized_cocoonery_3"))
+
+# 将数据筛选为包含Genus列中的值的子集
+physeq <- physeq %>% subset_taxa(Genus %in% genus)
+# 将相同Genus的行合并成一行，并将它们的相对丰度相加
+physeq <- tax_glom(physeq, taxrank = "Genus")
+
+otu <- otu_table(physeq) %>% as.matrix()
+rownames(otu) <- data.frame(tax_table(physeq))[, rank]
+otu <- log10(otu)
+otu[is.infinite(otu)] <- NA
+otu[is.na(otu)] <- 0
+
+tax <- tax_table(physeq) %>% data.frame() %>%
+  mutate(Genus = ifelse(str_detect(Genus, " "), str_sub(Genus, str_locate_my_first(Genus, " ", F)), Genus))
+
+# 按Genus的顺序重新排列OTU矩阵
+genus_order <- tax$Genus
+otu <- otu[genus_order, ]
+
+# 绘制热图
+col_fun <- colorRamp2(c(0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+Heatmap(otu, name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu), ]$Cocoonery_type, col = list(Cocoonery_type = col_cocoonery_type), show_legend = FALSE),
+        row_labels = tax$Genus,
+        heatmap_legend_param = list(title_position = "lefttop-rot", legend_height = unit(6, "cm")),
+        col = c("#5050a0", "#5b5ea5", "#8c8c74", "#b9bb45", "#F5EC57", "#EEC900"),
+        cluster_columns = FALSE, cluster_rows = FALSE, clustering_distance_rows = "pearson")
+```
+
+```{r Silkworm bacterial pathogens heatmap2 O1side}
+library(ComplexHeatmap)
+library(circlize)
+# 读取silkworm_pathogens_genus.csv文件，调用致病菌属名
+pathogens_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Pathogens/silkworm_pathogens_genus.csv")
+
+# 获取Genus列的数据
+genus <- pathogens_genus$Genus
+
+# 读取数据
+physeq <- physeq_bac
+physeq <- physeq %>%
+  subset_samples(Location %in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type %in% c("H2O", "WW","KB","MCFA"))
+
+# 将数据筛选为包含Genus列中的值的子集
+physeq <- physeq %>% subset_taxa(Genus %in% genus)
+# 将相同Genus的行合并成一行，并将它们的相对丰度相加
+physeq <- tax_glom(physeq, taxrank = "Genus")
+
+otu <- otu_table(physeq) %>% as.matrix()
+rownames(otu) <- data.frame(tax_table(physeq))[, rank]
+otu <- log10(otu)
+otu[is.infinite(otu)] <- NA
+otu[is.na(otu)] <- 0
+
+tax <- tax_table(physeq) %>% data.frame() %>%
+  mutate(Genus = ifelse(str_detect(Genus, " "), str_sub(Genus, str_locate_my_first(Genus, " ", F)), Genus))
+
+# 按Genus的顺序重新排列OTU矩阵
+genus_order <- tax$Genus
+otu <- otu[genus_order, ]
+
+# 绘制热图
+col_fun <- colorRamp2(c(0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+Heatmap(otu, name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu), ]$Cocoonery_type, col = list(Cocoonery_type = col_cocoonery_type), show_legend = FALSE),
+        row_labels = tax$Genus,
+        heatmap_legend_param = list(title_position = "lefttop-rot", legend_height = unit(6, "cm")),
+        col = c("#5050a0", "#5b5ea5", "#8c8c74", "#b9bb45", "#F5EC57", "#EEC900"),
+        cluster_columns = FALSE, cluster_rows = FALSE, clustering_distance_rows = "pearson")
+```
+
+```{r Silkworm bacterial pathogens heatmap3 Pre-Post}
+library(ComplexHeatmap)
+library(circlize)
+# 读取silkworm_pathogens_genus.csv文件，调用致病菌属名
+pathogens_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Pathogens/silkworm_pathogens_genus.csv")
+
+# 获取Genus列的数据
+genus <- pathogens_genus$Genus
+
+# 读取数据
+physeq <- physeq_bac
+physeq <- physeq %>%
+  subset_samples(Location %in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type %in% c("Pre", "AWW","BKB","CMCFA"))
+
+# 将数据筛选为包含Genus列中的值的子集
+physeq <- physeq %>% subset_taxa(Genus %in% genus)
+# 将相同Genus的行合并成一行，并将它们的相对丰度相加
+physeq <- tax_glom(physeq, taxrank = "Genus")
+
+otu <- otu_table(physeq) %>% as.matrix()
+rownames(otu) <- data.frame(tax_table(physeq))[, rank]
+otu <- log10(otu)
+otu[is.infinite(otu)] <- NA
+otu[is.na(otu)] <- 0
+
+tax <- tax_table(physeq) %>% data.frame() %>%
+  mutate(Genus = ifelse(str_detect(Genus, " "), str_sub(Genus, str_locate_my_first(Genus, " ", F)), Genus))
+
+# 按Genus的顺序重新排列OTU矩阵
+genus_order <- tax$Genus
+otu <- otu[genus_order, ]
+
+# 绘制热图
+col_fun <- colorRamp2(c(0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+Heatmap(otu, name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu), ]$Cocoonery_type, col = list(Cocoonery_type = col_cocoonery_type), show_legend = FALSE),
+        row_labels = tax$Genus,
+        heatmap_legend_param = list(title_position = "lefttop-rot", legend_height = unit(6, "cm")),
+        col = c("#5050a0", "#5b5ea5", "#8c8c74", "#b9bb45", "#F5EC57", "#EEC900"),
+        cluster_columns = FALSE, cluster_rows = FALSE, clustering_distance_rows = "pearson")
+```
+
+
+```{r Pathogenic bacteria相对丰度_先跑上面相对应的Silkworm bacterial pathogens heatmap}
+# 提取各组内的样品数据
+##1
+traditional_samples <- subset_samples(physeq, Cocoonery_type == "traditional_cocoonery")
+mechanized_samples <- subset_samples(physeq, Cocoonery_type == "mechanized_cocoonery")
+##1.2
+Pre_samples <- subset_samples(physeq, Cocoonery_type == "Pre")
+##1.3
+mechanized_cocoonery_3_samples <- subset_samples(physeq, Cocoonery_type == "mechanized_cocoonery_3")
+##2
+H2O_samples <- subset_samples(physeq, Cocoonery_type == "H2O")
+WW_samples <- subset_samples(physeq, Cocoonery_type == "WW")
+KB_samples <- subset_samples(physeq, Cocoonery_type == "KB")
+MCFA_samples <- subset_samples(physeq, Cocoonery_type == "MCFA")
+##3
+AWW_samples <- subset_samples(physeq, Cocoonery_type == "AWW")
+BKB_samples <- subset_samples(physeq, Cocoonery_type == "BKB")
+CMCFA_samples <- subset_samples(physeq, Cocoonery_type == "CMCFA")
+
+
+# 计算每个 Genus 在各组中的总相对丰度
+genus_total_abundance <- function(samples) {
+  # 计算每个 Genus 在所有样品中的总丰度
+  total_abundance <- rowSums(otu_table(samples))
+  # 计算总丰度的和
+  total_sum <- sum(total_abundance)
+  # 计算每个 Genus 的相对丰度
+  relative_abundance <- total_abundance / total_sum
+  return(relative_abundance)
+}
+
+
+# 之前的方法
+# 计算每个 Genus 在各组中的相对丰度
+# genus_relative_abundance <- function(samples) {
+#   # 计算每个 Genus 在每个样品中的相对丰度
+#   relative_abundance <- otu_table(samples) / sample_sums(samples)
+#   # 按列（样品）求平均，得到每个 Genus 在这个组别中的平均相对丰度
+#   mean_relative_abundance <- rowMeans(relative_abundance, na.rm = TRUE)
+#   return(mean_relative_abundance)
+# }
+
+
+# 1输出并显示 traditional_cocoonery 和 mechanized_cocoonery 中每个 Genus 的总相对丰度
+traditional_total_abundance <- genus_total_abundance(traditional_samples)
+mechanized_total_abundance <- genus_total_abundance(mechanized_samples)
+print(traditional_total_abundance)
+print(mechanized_total_abundance)
+##2
+Pre_total_abundance <- genus_total_abundance(Pre_samples)
+print(Pre_total_abundance)
+##3
+mechanized_cocoonery_3_total_abundance <- genus_total_abundance(mechanized_cocoonery_3_samples)
+print(mechanized_cocoonery_3_total_abundance)
+##4
+H2O_total_abundance <- genus_total_abundance(H2O_samples)
+WW_total_abundance <- genus_total_abundance(WW_samples)
+KB_total_abundance <- genus_total_abundance(KB_samples)
+MCFA_total_abundance <- genus_total_abundance(MCFA_samples)
+print(H2O_total_abundance)
+print(WW_total_abundance)
+print(KB_total_abundance)
+print(MCFA_total_abundance)
+##5
+AWW_total_abundance <- genus_total_abundance(AWW_samples)
+BKB_total_abundance <- genus_total_abundance(BKB_samples)
+CMCFA_total_abundance <- genus_total_abundance(CMCFA_samples)
+print(AWW_total_abundance)
+print(BKB_total_abundance)
+print(CMCFA_total_abundance)
+
+
+# 获取 Genus 的分类信息
+get_genus_taxonomy <- function(samples) {
+  genus_names <- rownames(otu_table(samples))
+  taxonomy <- tax_table(samples)[genus_names, ]
+  return(taxonomy)
+}
+
+# 获取 CMCFA 样品的分类信息
+CMCFA_taxonomy <- get_genus_taxonomy(CMCFA_samples)
+
+# 提取属名列
+CMCFA_genus <- CMCFA_taxonomy[, "Genus"]
+names(CMCFA_genus) <- rownames(CMCFA_taxonomy) # 将 OTU 编码作为名称
+print(CMCFA_genus)
+
+
+
+
+
+
+```
+
+
+```{r Specific bacterial pathogens heatmap1 tra-mec（需要先跑一遍differential analysis1}
+
+library(ComplexHeatmap)
+library(circlize)
+
+# 读取silkworm_pathogens_genus.csv文件
+pathogens_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Pathogens/specific_pathogens_genus.csv")
+
+# 获取Genus列的数据
+genus <- pathogens_genus$Genus
+
+# 读取physeq_bac数据
+physeq <- physeq_bac
+
+# 将数据筛选为指定的Location和Cocoonery_type的子集
+physeq <- physeq %>%
+  subset_samples(Location %in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type %in% c("traditional_cocoonery", "mechanized_cocoonery")) 
+
+# 将数据再次筛选为包含Genus列中的值的子集
+physeq <- physeq %>% subset_taxa(Genus %in% genus)
+
+# 将相同Genus的行合并成一行，并将它们的相对丰度相加
+physeq <- tax_glom(physeq, taxrank = "Genus")
+
+# 对数据进行处理（这部分代码与原代码相同）
+
+otu <- otu_table(physeq) %>% as.matrix()
+rownames(otu) <- data.frame(tax_table(physeq))[, rank]
+otu <- log10(otu)
+otu[is.infinite(otu)] <- NA
+otu[is.na(otu)] <- 0
+
+tax <- tax_table(physeq) %>% data.frame() %>%
+  mutate(Genus = ifelse(str_detect(Genus, " "), str_sub(Genus, str_locate_my_first(Genus, " ", F)), Genus))
+
+# 以下部分与原代码相同，绘制热图
+col_fun <- colorRamp2(c(0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+# 按照相对丰度对属名进行排序
+sorted_tax <- tax[order(rowMeans(otu, na.rm = TRUE), decreasing = TRUE), ]
+
+# 绘制热图时指定行的顺序
+Heatmap(otu, name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu), ]$Cocoonery_type, col = list(Cocoonery_type = col_cocoonery_type), show_legend = FALSE),
+        row_order = sorted_tax$Genus,
+        heatmap_legend_param = list(title_position = "lefttop-rot", legend_height = unit(6, "cm")),
+        col = c("#F2EBE5", "#ECD0B4","#dba27d","#c16d58","#A13D3B","#831A21"),
+        cluster_columns = FALSE, cluster_rows = FALSE, clustering_distance_rows = "pearson")
+```
+
+```{r Specific bacterial pathogens heatmap1.2 clen-dirty}
+library(ComplexHeatmap)
+library(circlize)
+
+# 读取silkworm_pathogens_genus.csv文件
+pathogens_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Pathogens/specific_pathogens_genus.csv")
+
+# 获取Genus列的数据
+genus <- pathogens_genus$Genus
+
+# 读取physeq_bac数据
+physeq <- physeq_bac
+
+# 将数据筛选为指定的Location和Cocoonery_type的子集
+physeq <- physeq %>%
+  subset_samples(Location %in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type %in% c("mechanized_cocoonery", "Pre")) 
+
+# 将数据再次筛选为包含Genus列中的值的子集
+physeq <- physeq %>% subset_taxa(Genus %in% genus)
+
+# 将相同Genus的行合并成一行，并将它们的相对丰度相加
+physeq <- tax_glom(physeq, taxrank = "Genus")
+
+# 对数据进行处理（这部分代码与原代码相同）
+
+otu <- otu_table(physeq) %>% as.matrix()
+rownames(otu) <- data.frame(tax_table(physeq))[, rank]
+otu <- log10(otu)
+otu[is.infinite(otu)] <- NA
+otu[is.na(otu)] <- 0
+
+tax <- tax_table(physeq) %>% data.frame() %>%
+  mutate(Genus = ifelse(str_detect(Genus, " "), str_sub(Genus, str_locate_my_first(Genus, " ", F)), Genus))
+
+# 以下部分与原代码相同，绘制热图
+col_fun <- colorRamp2(c(0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+# 按照相对丰度对属名进行排序
+sorted_tax <- tax[order(rowMeans(otu, na.rm = TRUE), decreasing = TRUE), ]
+
+# 绘制热图时指定行的顺序
+Heatmap(otu, name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu), ]$Cocoonery_type, col = list(Cocoonery_type = col_cocoonery_type), show_legend = FALSE),
+        row_order = sorted_tax$Genus,
+        heatmap_legend_param = list(title_position = "lefttop-rot", legend_height = unit(6, "cm")),
+        col = c("#F2EBE5", "#ECD0B4","#dba27d","#c16d58","#A13D3B","#831A21"),
+        cluster_columns = FALSE, cluster_rows = FALSE, clustering_distance_rows = "pearson")
+```
+
+```{r Specific bacterial pathogens heatmap1.3 0h-72h}
+library(ComplexHeatmap)
+library(circlize)
+
+# 读取silkworm_pathogens_genus.csv文件
+pathogens_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Pathogens/specific_pathogens_genus.csv")
+
+# 获取Genus列的数据
+genus <- pathogens_genus$Genus
+
+# 读取physeq_bac数据
+physeq <- physeq_bac
+
+# 将数据筛选为指定的Location和Cocoonery_type的子集
+physeq <- physeq %>%
+  subset_samples(Location %in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type %in% c("mechanized_cocoonery", "mechanized_cocoonery_3")) 
+
+# 将数据再次筛选为包含Genus列中的值的子集
+physeq <- physeq %>% subset_taxa(Genus %in% genus)
+
+# 将相同Genus的行合并成一行，并将它们的相对丰度相加
+physeq <- tax_glom(physeq, taxrank = "Genus")
+
+# 对数据进行处理（这部分代码与原代码相同）
+
+otu <- otu_table(physeq) %>% as.matrix()
+rownames(otu) <- data.frame(tax_table(physeq))[, rank]
+otu <- log10(otu)
+otu[is.infinite(otu)] <- NA
+otu[is.na(otu)] <- 0
+
+tax <- tax_table(physeq) %>% data.frame() %>%
+  mutate(Genus = ifelse(str_detect(Genus, " "), str_sub(Genus, str_locate_my_first(Genus, " ", F)), Genus))
+
+# 以下部分与原代码相同，绘制热图
+col_fun <- colorRamp2(c(0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+# 按照相对丰度对属名进行排序
+sorted_tax <- tax[order(rowMeans(otu, na.rm = TRUE), decreasing = TRUE), ]
+
+# 绘制热图时指定行的顺序
+Heatmap(otu, name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu), ]$Cocoonery_type, col = list(Cocoonery_type = col_cocoonery_type), show_legend = FALSE),
+        row_order = sorted_tax$Genus,
+        heatmap_legend_param = list(title_position = "lefttop-rot", legend_height = unit(6, "cm")),
+        col = c("#F2EBE5", "#ECD0B4","#dba27d","#c16d58","#A13D3B","#831A21"),
+        cluster_columns = FALSE, cluster_rows = FALSE, clustering_distance_rows = "pearson")
+```
+
+```{r Specific bacterial pathogens heatmap2 O1side}
+library(ComplexHeatmap)
+library(circlize)
+
+# 读取silkworm_pathogens_genus.csv文件
+pathogens_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Pathogens/specific_pathogens_genus.csv")
+
+# 获取Genus列的数据
+genus <- pathogens_genus$Genus
+
+# 读取physeq_bac数据
+physeq <- physeq_bac
+
+# 将数据筛选为指定的Location和Cocoonery_type的子集
+physeq <- physeq %>%
+  subset_samples(Location %in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type %in% c("H2O", "WW","KB","MCFA")) 
+
+# 将数据再次筛选为包含Genus列中的值的子集
+physeq <- physeq %>% subset_taxa(Genus %in% genus)
+
+# 将相同Genus的行合并成一行，并将它们的相对丰度相加
+physeq <- tax_glom(physeq, taxrank = "Genus")
+
+# 对数据进行处理（这部分代码与原代码相同）
+
+otu <- otu_table(physeq) %>% as.matrix()
+rownames(otu) <- data.frame(tax_table(physeq))[, rank]
+otu <- log10(otu)
+otu[is.infinite(otu)] <- NA
+otu[is.na(otu)] <- 0
+
+tax <- tax_table(physeq) %>% data.frame() %>%
+  mutate(Genus = ifelse(str_detect(Genus, " "), str_sub(Genus, str_locate_my_first(Genus, " ", F)), Genus))
+
+# 以下部分与原代码相同，绘制热图
+col_fun <- colorRamp2(c(0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+# 按照相对丰度对属名进行排序
+sorted_tax <- tax[order(rowMeans(otu, na.rm = TRUE), decreasing = TRUE), ]
+
+# 绘制热图时指定行的顺序
+Heatmap(otu, name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu), ]$Cocoonery_type, col = list(Cocoonery_type = col_cocoonery_type), show_legend = FALSE),
+        row_order = sorted_tax$Genus,
+        heatmap_legend_param = list(title_position = "lefttop-rot", legend_height = unit(6, "cm")),
+        col = c("#F2EBE5", "#ECD0B4","#dba27d","#c16d58","#A13D3B","#831A21"),
+        cluster_columns = FALSE, cluster_rows = FALSE, clustering_distance_rows = "pearson")
+```
+
+```{r Specific bacterial pathogens heatmap3 pre-post}
+library(ComplexHeatmap)
+library(circlize)
+
+# 读取silkworm_pathogens_genus.csv文件
+pathogens_genus <- read.csv("C:/Users/99495/Desktop/R_Working directory/Pathogens/specific_pathogens_genus.csv")
+
+# 获取Genus列的数据
+genus <- pathogens_genus$Genus
+
+# 读取physeq_bac数据
+physeq <- physeq_bac
+
+# 将数据筛选为指定的Location和Cocoonery_type的子集
+physeq <- physeq %>%
+  subset_samples(Location %in% c("HZNX")) %>% 
+  subset_samples(Cocoonery_type %in% c("Pre", "AWW","BKB","CMCFA")) 
+
+# 将数据再次筛选为包含Genus列中的值的子集
+physeq <- physeq %>% subset_taxa(Genus %in% genus)
+
+# 将相同Genus的行合并成一行，并将它们的相对丰度相加
+physeq <- tax_glom(physeq, taxrank = "Genus")
+
+# 对数据进行处理（这部分代码与原代码相同）
+
+otu <- otu_table(physeq) %>% as.matrix()
+rownames(otu) <- data.frame(tax_table(physeq))[, rank]
+otu <- log10(otu)
+otu[is.infinite(otu)] <- NA
+otu[is.na(otu)] <- 0
+
+tax <- tax_table(physeq) %>% data.frame() %>%
+  mutate(Genus = ifelse(str_detect(Genus, " "), str_sub(Genus, str_locate_my_first(Genus, " ", F)), Genus))
+
+# 以下部分与原代码相同，绘制热图
+col_fun <- colorRamp2(c(0, 2), c("grey", "#800000"))
+col_fun(seq(-3, 3))
+
+# 按照相对丰度对属名进行排序
+sorted_tax <- tax[order(rowMeans(otu, na.rm = TRUE), decreasing = TRUE), ]
+
+# 绘制热图时指定行的顺序
+Heatmap(otu, name = "Log-transformed Abundance",
+        top_annotation = HeatmapAnnotation(Cocoonery_type = group[colnames(otu), ]$Cocoonery_type, col = list(Cocoonery_type = col_cocoonery_type), show_legend = FALSE),
+        row_order = sorted_tax$Genus,
+        heatmap_legend_param = list(title_position = "lefttop-rot", legend_height = unit(6, "cm")),
+        col = c("#F2EBE5", "#ECD0B4","#dba27d","#c16d58","#A13D3B","#831A21"),
+        cluster_columns = FALSE, cluster_rows = FALSE, clustering_distance_rows = "pearson")
+```
+
+
+
+
+
+
+
+
+```{r composition barplot JXHN_inoutlab}
+library(nyankomicro)
+rank="Genus" #修改水平,Phylum门水平，Genus属水平等
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("JXHN")) %>% 
+  #将Location为HZNX（湖州南浔）的样本提取到physeq变量
+
+  
+##选取作图的组别
+  subset_samples(Area%in% c("IN","OUT","LAB")) 
+
+
+##聚合：
+physeq <- physeq %>% speedyseq::tax_glom(taxrank = rank)  %>%
+#使用 speedyseq 包中的 tax_glom 函数，对微生物群落数据进行聚合（glom）操作，指定聚合的分类水平为rank
+  change_rare_phylum_name(max_number = 18,level = rank,relative = T,in_eachgroup = NULL) %>%
+  select_tax_table(!!rank) %>% aggregate_taxa(level = rank)
+
+##作图：
+microbiome_barplot(physeq,rank,
+                   plot_category = c("Area"),
+                   level=rank,color_methods="abundance",
+                   plot_percent=0.01)+
+                       scale_fill_manual(values = genus_colors)+
+                       theme(axis.text.x = element_text(angle = 90, hjust = 1),
+                   text = element_text(size = 15),
+                   legend.text = element_text(size = 13))+
+                  scale_y_break(c(2,60),#截断位置及范围
+                              space =0.1)#间距
+
+##输出
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/composition_JXHN_inoutlab.pdf",width =10,height = 6)
+```
+
+```{r alpha diversity JXHN_all}
+library(agricolae)
+physeq<-physeq_bac 
+#只取这一部分数据作图，与composition不一样，不用location
+t_otu<-data.frame(t(otu_table(physeq)))
+alpha_group<-cbind(jintao::alpha(t_otu,phy),group[rownames(t_otu),])
+
+
+df<-alpha_group %>% 
+  filter(Group%in% c("MA", "IS", "TB", "TE", "CA", "OF", "OD","LT","LS","LE")) %>% 
+  mutate(Group=factor(Group, levels = c("MA", "IS", "TB", "TE", "CA", "OF", "OD","LT","LS","LE")))
+
+richness_out <- anova_sig(df , df$Richness , df$Group)
+richness_out$type <- "Richness" #添加一列 "type" 表示alpha多样性类别(richness or shannon等）
+#丰富度richness的ANOVA检验及结果
+
+shannon_out <- anova_sig(df, df$Shannon , df$Group)
+shannon_out$type <- "Shannon"
+#香农指数的的ANOVA检验及结果
+
+alpha_out <- rbind(shannon_out , richness_out)%>%rename_with(~"marker" , 2)%>% rename_with(~"Group" , 3)
+#合并三者结果（两次anova和新增列），然后重命名列名
+
+df_long <- df %>% select(Shannon,Richness,Group) %>% 
+     pivot_longer( cols = -Group , names_to = "type" , values_to = "alpha_index")
+#将长表与差异分析结果合并
+
+df_long_all <- left_join(df_long , alpha_out , by = c("type" , "Group"))
+df_long_all$Group <- factor(df_long_all$Group, levels = c("MA", "IS", "TB", "TE", "CA", "OF", "OD","LT","LS","LE"))
+p_fun_alpha <- ggplot(df_long_all , aes(Group , alpha_index))+
+  scale_fill_manual(values = col_Machine_group)+
+  geom_boxplot(aes(fill = Group))+
+  geom_jitter(aes(Group , alpha_index) , size = 1)+
+  geom_text(aes(x = Group , y = max+sd , label = marker) , size = 4 , position =  position_dodge(width = 0.2))+
+  facet_wrap(.~type ,  #type列作为变量，分面为一行多列
+             scales = "free_y")+  #scales = "free_y"可以使各个分面有自己的y轴刻度
+  theme(panel.grid = element_blank() , 
+        panel.background = element_rect(fill = 'white') , 
+        panel.border = element_rect(fill = NA , color = "black" ,  linewidth = 0.8 ,  linetype = "solid"),
+        axis.title = element_blank() , 
+        axis.text.x = element_blank(),
+        text = element_text(size = 15),
+        legend.text = element_text(size = 13));p_fun_alpha
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/alpha_JXHN_all.pdf",width = 6,height = 4)
+```
+
+```{r alpha diversity JXHN_inoutlab}
+library(agricolae)
+physeq<-physeq_bac 
+#只取这一部分数据作图，与composition不一样，不用location
+t_otu<-data.frame(t(otu_table(physeq)))
+alpha_group<-cbind(jintao::alpha(t_otu,phy),group[rownames(t_otu),])
+
+
+df<-alpha_group %>% 
+  filter(Area%in% c("IN", "OUT", "LAB")) %>% 
+  mutate(Area=factor(Area, levels = c("IN", "OUT", "LAB")))
+
+richness_out <- anova_sig(df , df$Richness , df$Area)
+richness_out$type <- "Richness" #添加一列 "type" 表示alpha多样性类别(richness or shannon等）
+#丰富度richness的ANOVA检验及结果
+
+shannon_out <- anova_sig(df, df$Shannon , df$Area)
+shannon_out$type <- "Shannon"
+#香农指数的的ANOVA检验及结果
+
+alpha_out <- rbind(shannon_out , richness_out)%>%rename_with(~"marker" , 2)%>% rename_with(~"Area" , 3)
+#合并三者结果（两次anova和新增列），然后重命名列名
+
+df_long <- df %>% select(Shannon,Richness,Area) %>% 
+     pivot_longer( cols = -Area , names_to = "type" , values_to = "alpha_index")
+#将长表与差异分析结果合并
+
+df_long_all <- left_join(df_long , alpha_out , by = c("type" , "Area"))
+df_long_all$Area <- factor(df_long_all$Area, levels = c("IN", "OUT", "LAB"))
+p_fun_alpha <- ggplot(df_long_all , aes(Area , alpha_index))+
+  scale_fill_manual(values = col_Machine_group)+
+  geom_boxplot(aes(fill = Area))+
+  geom_jitter(aes(Area , alpha_index) , size = 1)+
+  geom_text(aes(x = Area , y = max+sd , label = marker) , size = 4 , position =  position_dodge(width = 0.2))+
+  facet_wrap(.~type ,  #type列作为变量，分面为一行多列
+             scales = "free_y")+  #scales = "free_y"可以使各个分面有自己的y轴刻度
+  theme(panel.grid = element_blank() , 
+        panel.background = element_rect(fill = 'white') , 
+        panel.border = element_rect(fill = NA , color = "black" ,  linewidth = 0.8 ,  linetype = "solid"),
+        axis.title = element_blank() , 
+        axis.text.x = element_blank(),
+        text = element_text(size = 15),
+        legend.text = element_text(size = 13));p_fun_alpha
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/alpha_JXHN_inoutlab.pdf",width = 6,height = 4)
+```
+
+```{r beta diversity JXHN_all}
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("JXHN"))%>%
+  subset_samples(Group%in% c("MA", "IS", "TB", "TE", "CA", "OS", "OD", "LAB"))
+#筛选需要分析和作图的样品
+ 
+physeq@sam_data$Group <- factor(physeq@sam_data$Group, levels = c("MA", "IS", "TB", "TE", "CA", "OS", "OD", "LAB"))
+#将physeq对象中的样本数据中的Group列转换为因子型，并设置水平为"Pre"、"postA"、"postB"和"postC"。
+
+group<-meta(physeq)#meta()函数：提取元数据
+otu<-otu_table(physeq) %>% data.frame()#otu_table():提取OTU表格;data.frame():转换为数据框
+distance <- vegdist(t(otu), method = 'bray')#计算Bray-Curtis距离
+nmds <- metaMDS(distance, k = 2)#进行非度量多维尺度分析（NMDS）并设置降维到2个维度
+
+stress <- nmds$stress#获取NMDS的stress值
+adonis <- adonis2(t(otu)~Group,group)#运行Adonis分析，评估组间差异。
+#跑完这一行直接在控制台打adonis并运行，即可看到结果，随后手动添加P值或显著性标识
+
+
+pp<-plot_ordination(physeq, ordinate(physeq, method = "NMDS", distance = "bray") , 
+                    type="samples",color="Group")+
+  geom_point(size=3)+
+  scale_color_manual(values = col_Machine_group)+  #注意color和fill的区别，有时候使用错误不会改变颜色。
+  scale_shape_manual(values = c(17,16))
+
+pp+theme_bw()+   
+geom_encircle(aes(group = Group,fill=Group),expand=0,spread=0.5,s_shape=1,size=3,linetype = 1,alpha=0.2)+
+#geom_encircle()函数根据样本连线创建一个区域，将本组样本点包括进去
+scale_fill_manual(values = col_Machine_group)+#设置区域颜色与样本点颜色一致
+#stat_ellipse()+ #加上椭圆的圈（置信圈）
+scale_x_continuous(expand = expand_scale(0.05))+
+scale_y_continuous(expand = expand_scale(0.05))+#expand_scale(0.05)表示将轴的数据范围扩展5%，这样可以留出一定空白。
+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())#+#去掉网格线
+#ggtitle(paste(paste(stress_text, adonis_text), anosim_text))
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/beta_NMDS_JXHN.pdf",width = 6,height = 4)
+```
+
+```{r beta diversity JXHN_inoutlab}
+physeq<-physeq_bac%>%
+  subset_samples(Location%in% c("JXHN"))%>%
+  subset_samples(Area%in% c("IN", "OUT", "LAB"))
+#筛选需要分析和作图的样品
+ 
+physeq@sam_data$Group <- factor(physeq@sam_data$Area, levels = c("IN", "OUT", "LAB"))
+#将physeq对象中的样本数据中的Group列转换为因子型，并设置水平为"Pre"、"postA"、"postB"和"postC"。
+
+group<-meta(physeq)#meta()函数：提取元数据
+otu<-otu_table(physeq) %>% data.frame()#otu_table():提取OTU表格;data.frame():转换为数据框
+distance <- vegdist(t(otu), method = 'bray')#计算Bray-Curtis距离
+nmds <- metaMDS(distance, k = 2)#进行非度量多维尺度分析（NMDS）并设置降维到2个维度
+
+stress <- nmds$stress#获取NMDS的stress值
+adonis <- adonis2(t(otu)~Area,group)#运行Adonis分析，评估组间差异。
+#跑完这一行直接在控制台打adonis并运行，即可看到结果，随后手动添加P值或显著性标识
+
+
+pp<-plot_ordination(physeq, ordinate(physeq, method = "NMDS", distance = "bray") , 
+                    type="samples",color="Group")+
+  geom_point(size=3)+
+  scale_color_manual(values = col_Machine_group)+  #注意color和fill的区别，有时候使用错误不会改变颜色。
+  scale_shape_manual(values = c(17,16))
+
+pp+theme_bw()+   
+geom_encircle(aes(group = Area,fill=Area),expand=0,spread=0.5,s_shape=1,size=3,linetype = 1,alpha=0.2)+
+#geom_encircle()函数根据样本连线创建一个区域，将本组样本点包括进去
+scale_fill_manual(values = col_Machine_group)+#设置区域颜色与样本点颜色一致
+#stat_ellipse()+ #加上椭圆的圈（置信圈）
+scale_x_continuous(expand = expand_scale(0.05))+
+scale_y_continuous(expand = expand_scale(0.05))+#expand_scale(0.05)表示将轴的数据范围扩展5%，这样可以留出一定空白。
+theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())#+#去掉网格线
+#ggtitle(paste(paste(stress_text, adonis_text), anosim_text))
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/beta_NMDS_JXHN_inoutlab.pdf",width = 6,height = 4)
+```
+
+```{r assembly processes JXHN_inoutlab}
+col_process <- c("#ef1828","#f88421","#ffbc14","#006b7b")
+physeq<-physeq_bac
+
+
+group_name <- c("IN","OUT","LAB")
+group_head<-"Cocoonery_type"
+dir.create("tmp") #dir.create()函数表示创建新目录
+
+library(iCAMP)
+icamp_results<-list()
+icamp_table<-list()
+tmp_icamp<-list()
+list_physeq <- list(Bac=physeq_bac)
+
+
+for(pri in c("Bac")){
+  physeq<-list_physeq[[pri]] 
+  icamp_table[[pri]]<-list()
+  group <- microbiome::meta(physeq)
+  for (i in group_name) {
+    tmp<-prune_samples( sample_data( physeq )[[ group_head ]]==i,physeq) %>% prune_taxa(taxa_sums(.)>0, .)#大于多少到时候可以改
+    phy<-phy_tree(tmp)
+    t_otu<-as.data.frame(t(otu_table(tmp)))
+    print(i)
+    dir.create(paste0("tmp/",pri,i))
+    tmp_icamp[[i]]<- icamp.big(t_otu,phy,nworker = 16,bin.size.limit = 24,pd.wd = paste0("tmp/",pri,i))#icamp.big（）是icamp包主函数，用于计算
+    icamp_table[[pri]][[i]]<-colMeans(tmp_icamp[[i]]$CbMPDiCBraya[,3:7])
+  }
+  icamp_results[[pri]]<-tmp_icamp
+  icamp_table[[pri]]<-do.call(rbind,icamp_table[[pri]])[,1:5] %>% as.data.frame() %>% mutate(primer=pri, Habitat=group_name)
+};rm(tmp_icamp)
+
+
+tmp<-list()
+group_name<-group_name
+for(i in 1:1){
+  tmp[[i]]<-list()
+  for(j in 1:length(group_name)){
+    pri<-c("Bac")[i]
+    tmp[[i]][[j]] <- icamp_results[[pri]][[ group_name[j] ]]$CbMPDiCBraya %>% 
+      mutate(primer=pri, sample_type= group_name[j])
+  }
+  tmp[[i]]<-do.call(rbind,tmp[[i]])
+}
+
+df<-do.call(rbind,tmp) %>% mutate(Selection=Heterogeneous.Selection+Homogeneous.Selection)
+df$cocoonery_type <- factor(df$sample_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+# compare_means(data=df,Selection~Habitat)
+df<-df %>% melt()
+df$variable<-str_replace(df$variable,"[.]", " ")#将.去除
+df$cocoonery_type <- factor(df$cocoonery_type, levels = group_name)
+df$primer <- factor(df$primer, levels=c("Bac") %>% rev())
+
+#柱状图
+df <- df %>%
+  filter(!variable%in% c("Heterogeneous Selection", "Homogeneous Selection"))
+df_summarized <- df %>%
+  mutate(primer_cocoonery_type = paste(primer, cocoonery_type, sep = "_"))%>%
+  group_by(primer_cocoonery_type,variable) %>%
+  summarise(totalvalue = sum(value)) %>% 
+  mutate(percentage = totalvalue / sum(totalvalue) * 100) %>% 
+  data.frame()
+
+df_summarized %>% ggplot() +
+  geom_col(aes(x=primer_cocoonery_type,y=percentage,fill=variable),width = 0.85) +
+  scale_fill_manual(values = col_process)+
+  scale_y_continuous(breaks = seq(0, 100, by = 25)) +
+  scale_y_continuous(expand = c(0,0))+ #去掉x轴上方的空白区域
+  labs(y = "Percentage")+
+  labs(x = "Community Building")+
+  labs(fill = "Processes ")+
+  theme_bw()+
+  theme(panel.grid.major = element_blank(),panel.grid.minor = element_blank())
+
+ggsave("C:/Users/99495/Desktop/R_Working directory/figure/Community building_JXHN_inoutlab.pdf",width = 6,height = 4)
+```
+
+
+
+
+
+```{r 非正态数据统计分析（qPCR）}
+library(car)
+data1 <- c(10066721.21, 51475920.45, 344987.7414, 273010.0716, 1319297.235, 826174.8923, 2353230.144, 8936261.02, 3073897.767, 2142525.9, 99236.6223, 50561.32846, 14136651.88, 27222292.04, 21307323.25, 32212123.61, 3009316.643, 3052233.47)
+data2 <- c(170238.8407, 2767186.909, 256434.7681, 259103.3852, 91533.23797, 160399.6613)
+data3 <- c(228968.4486, 1519548.642, 1353738.725, 6540288.965, 2910.790595, 274939.4789)
+data4 <- c(2778508.447, 731924.7363, 409458.9493, 641774.166, 352641.2714, 118460.1447)
+
+# 正态性检验
+shapiro_test1 <- shapiro.test(data1)
+shapiro_test2 <- shapiro.test(data2)
+shapiro_test3 <- shapiro.test(data3)
+shapiro_test4 <- shapiro.test(data4)
+
+print("Data 1 Shapiro-Wilk test:")
+print(shapiro_test1)
+print("Data 2 Shapiro-Wilk test:")
+print(shapiro_test2)
+print("Data 3 Shapiro-Wilk test:")
+print(shapiro_test3)
+print("Data 4 Shapiro-Wilk test:")
+print(shapiro_test4)
+
+# 方差齐性检验
+# levene_test <- leveneTest(list(data1, data2, data3, data4))
+# 
+# print("Levene test:")
+# print(levene_test)
+
+# Wilcoxon秩和检验的示例
+wilcox_test <- wilcox.test(data1, data4)#手动改变分析的组别
+
+# Kruskal-Wallis检验的示例
+kruskal_test <- kruskal.test(list(data1, data2, data3, data4))
+
+# Mann-Whitney U检验的示例
+mann_whitney_test <- wilcox.test(data1, data2)
+
+# Friedman检验的示例
+# friedman_test <- friedman.test(data1, data2, data3)
+
+# 打印检验结果
+print("Wilcoxon test:")
+print(wilcox_test)
+print("Kruskal-Wallis test:")
+print(kruskal_test)
+print("Mann-Whitney U test:")
+print(mann_whitney_test)
+# print("Friedman test:")
+# print(friedman_test)
+
+
+
+```
+
+
